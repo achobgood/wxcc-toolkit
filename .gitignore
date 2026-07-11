@@ -1,0 +1,25 @@
+.DS_Store
+*.swp
+*.swo
+*~
+.env
+.env.local
+.claude/settings.local.json
+.worktrees/
+
+# Local MCP config holds live tokens — never commit it. Use .mcp.json.example as the template.
+.mcp.json
+
+# Internal Superpowers scratch (brainstorm state, server pid/log) — never ship
+.superpowers/
+
+# Saved third-party (Cisco) documentation pages — copyrighted, do not redistribute
+docs/plans/Build and manage flows with Flow Designer.html
+docs/plans/Build and manage flows with Flow Designer_files/
+
+# Distribution artifacts — the pip package (wxcc-toolkit) supersedes the zip
+*.zip
+/dist/
+/build/
+*.egg-info/
+__pycache__/

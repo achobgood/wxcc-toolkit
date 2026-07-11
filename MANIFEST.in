@@ -1,0 +1,4 @@
+# The generated playbook bundle (incl. hidden .claude/ and .mcp.json) must land
+# in the sdist. `graft` recurses and includes hidden files, which package-data
+# globs alone do not guarantee for the source distribution.
+graft src/wxcc_flow/_playbook

@@ -1,0 +1,158 @@
+{
+  "name": "Example_Menu_Routing",
+  "flowType": "FLOW",
+  "description": "Menu-based routing: greeting → DTMF menu → route to queues by digit. Demonstrates ivr-menu with TTS connector and multi-path edges.",
+  "variables": [],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "NewPhoneContact",
+      "activityType": "start",
+      "group": "action",
+      "properties": {"activityName": "start"}
+    },
+    {
+      "id": "menu",
+      "name": "MainMenu",
+      "activityType": "enum-gateway",
+      "group": "enum-gateway",
+      "properties": {
+        "activityName": "ivr-menu",
+        "toggle": true,
+        "promptsTts": [{"name": "Press 1 for sales. Press 2 for support.", "type": "tts", "value": "Press 1 for sales. Press 2 for support."}],
+        "connector": "Cisco Cloud Text-to-Speech",
+        "connector_name": "Cisco Cloud Text-to-Speech",
+        "connector:name": "Cisco Cloud Text-to-Speech",
+        "connector_type": "Cisco Cloud Text-to-Speech",
+        "connector:type": "Cisco Cloud Text-to-Speech",
+        "interDigitTimeout": "3",
+        "noOfRetries": 3,
+        "speakingRate": 1,
+        "volumeGainDb": 0
+      }
+    },
+    {
+      "id": "sales-msg",
+      "name": "SalesMessage",
+      "activityType": "action",
+      "group": "action",
+      "properties": {
+        "activityName": "play-message",
+        "toggle": true,
+        "promptsTts": [{"name": "Connecting you to sales.", "type": "tts", "value": "Connecting you to sales."}],
+        "connector": "Cisco Cloud Text-to-Speech",
+        "connector_name": "Cisco Cloud Text-to-Speech",
+        "connector:name": "Cisco Cloud Text-to-Speech",
+        "connector_type": "Cisco Cloud Text-to-Speech",
+        "connector:type": "Cisco Cloud Text-to-Speech",
+        "speakingRate": 1,
+        "volumeGainDb": 0
+      }
+    },
+    {
+      "id": "sales-queue",
+      "name": "SalesQueue",
+      "activityType": "action",
+      "group": "action",
+      "properties": {
+        "activityName": "queue-contact",
+        "queueId": "247ec630-c684-4a6b-8b05-7c9cfcdb8f36"
+      }
+    },
+    {
+      "id": "support-msg",
+      "name": "SupportMessage",
+      "activityType": "action",
+      "group": "action",
+      "properties": {
+        "activityName": "play-message",
+        "toggle": true,
+        "promptsTts": [{"name": "Connecting you to support.", "type": "tts", "value": "Connecting you to support."}],
+        "connector": "Cisco Cloud Text-to-Speech",
+        "connector_name": "Cisco Cloud Text-to-Speech",
+        "connector:name": "Cisco Cloud Text-to-Speech",
+        "connector_type": "Cisco Cloud Text-to-Speech",
+        "connector:type": "Cisco Cloud Text-to-Speech",
+        "speakingRate": 1,
+        "volumeGainDb": 0
+      }
+    },
+    {
+      "id": "support-queue",
+      "name": "SupportQueue",
+      "activityType": "action",
+      "group": "action",
+      "properties": {
+        "activityName": "queue-contact",
+        "queueId": "b4a320d4-bf38-4468-b652-d505190c0f34"
+      }
+    },
+    {
+      "id": "hold-music",
+      "name": "HoldMusic",
+      "activityType": "action",
+      "group": "action",
+      "properties": {
+        "activityName": "play-music",
+        "musicFile": "defaultmusic_on_hold.wav",
+        "musicDuration": "600"
+      }
+    },
+    {
+      "id": "disconnect",
+      "name": "Disconnect",
+      "activityType": "action",
+      "group": "terminating-action",
+      "properties": {"activityName": "disconnect-contact"}
+    },
+    {
+      "id": "err-msg",
+      "name": "ErrorMessage",
+      "activityType": "action",
+      "group": "action",
+      "properties": {
+        "activityName": "play-message",
+        "toggle": true,
+        "promptsTts": [{"name": "We are experiencing technical difficulties.", "type": "tts", "value": "We are experiencing technical difficulties."}],
+        "connector": "Cisco Cloud Text-to-Speech",
+        "connector_name": "Cisco Cloud Text-to-Speech",
+        "connector:name": "Cisco Cloud Text-to-Speech",
+        "connector_type": "Cisco Cloud Text-to-Speech",
+        "connector:type": "Cisco Cloud Text-to-Speech",
+        "speakingRate": 1,
+        "volumeGainDb": 0
+      }
+    },
+    {
+      "id": "err-disconnect",
+      "name": "ErrorDisconnect",
+      "activityType": "action",
+      "group": "terminating-action",
+      "properties": {"activityName": "disconnect-contact"}
+    }
+  ],
+  "edges": [
+    {"id": "e1", "from": "start", "to": "menu"},
+    {"id": "e2", "from": "menu", "to": "sales-msg", "condition": "1"},
+    {"id": "e3", "from": "menu", "to": "support-msg", "condition": "2"},
+    {"id": "e4", "from": "menu", "to": "disconnect", "condition": "timeout"},
+    {"id": "e5", "from": "menu", "to": "disconnect", "condition": "invalid"},
+    {"id": "e6", "from": "sales-msg", "to": "sales-queue", "condition": "default"},
+    {"id": "e7", "from": "support-msg", "to": "support-queue", "condition": "default"},
+    {"id": "e8", "from": "sales-queue", "to": "hold-music"},
+    {"id": "e9", "from": "support-queue", "to": "hold-music"},
+    {"id": "e10", "from": "hold-music", "to": "disconnect", "condition": "default"},
+    {"id": "e11", "from": "err-msg", "to": "err-disconnect", "condition": "default"}
+  ],
+  "eventFlows": {
+    "OnGlobalError": {
+      "eventSpecificationName": "GlobalErrorHandling",
+      "nodes": [
+        {"id": "event-error", "name": "OnGlobalError", "activityType": "action", "group": "action", "properties": {"activityName": "Event", "eventSourceName": "OnGlobalError", "eventClassificationName": "ErrorHandling", "eventSpecificationName": "GlobalErrorHandling"}}
+      ],
+      "edges": [
+        {"id": "ev1", "from": "event-error", "to": "err-msg"}
+      ]
+    }
+  }
+}

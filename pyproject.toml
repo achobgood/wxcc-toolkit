@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=77.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wxcc-toolkit"
+version = "0.1.0"
+description = "WxCC AI Agent Builder Toolkit — a Claude Code playbook (agent, skills, rules, docs) plus the wxcc-flow Flow Designer CLI, delivered via pip"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+dependencies = [
+    "typer>=0.9.0",
+    "httpx>=0.27.0",
+    "rich>=13.0",
+]
+
+[project.scripts]
+wxcc-flow = "wxcc_flow.main:run"
+wxcc-toolkit = "wxcc_flow.main:run"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# Three patterns are required: setuptools' recursive glob does not descend into
+# dot-directories AND does not match hidden files, so "_playbook/**" alone would
+# drop both .claude/ and the bundle-root .mcp.json from the wheel.
+wxcc_flow = ["_playbook/**", "_playbook/.claude/**", "_playbook/.mcp.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

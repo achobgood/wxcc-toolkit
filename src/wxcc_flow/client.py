@@ -1,0 +1,222 @@
+"""REST client for the WxCC Flow Designer API."""
+import json
+import sys
+from typing import Optional
+
+import httpx
+import typer
+
+from wxcc_flow.config import resolve_token, get_org_id, get_project_id, get_base_url, save_config, load_config
+
+
+class FlowStoreError(Exception):
+    def __init__(self, status_code: int, body: str):
+        self.status_code = status_code
+        self.body = body
+        super().__init__(f"HTTP {status_code}: {body}")
+
+
+class FlowClient:
+    def __init__(self, debug: bool = False):
+        token = resolve_token()
+        if not token:
+            typer.echo("Error: No token found. Run 'wxcc-flow configure' or set WXCC_FLOW_TOKEN.", err=True)
+            raise typer.Exit(1)
+        self._token = token
+        self._base = get_base_url()
+        self._org_id = get_org_id()
+        self._project_id = get_project_id()
+        self._debug = debug
+
+    def _headers(self) -> dict:
+        return {
+            "Authorization": f"Bearer {self._token}",
+            "Content-Type": "application/json",
+        }
+
+    @property
+    def org_id(self) -> str:
+        if not self._org_id:
+            typer.echo("Error: No org_id configured. Run 'wxcc-flow configure'.", err=True)
+            raise typer.Exit(1)
+        return self._org_id
+
+    @property
+    def project_id(self) -> str:
+        if self._project_id:
+            return self._project_id
+        self._project_id = self._resolve_project_id()
+        return self._project_id
+
+    def _resolve_project_id(self) -> str:
+        """Auto-resolve project ID from userPreferences, then persist."""
+        typer.echo("Resolving project ID...", err=True)
+        headers = self._headers()
+        base = self._base
+        oid = self.org_id
+
+        # Primary: userPreferences contains the real project ID
+        prefs_url = f"{base}/{oid}/userPreferences"
+        resp = httpx.get(prefs_url, headers=headers, timeout=30)
+        if resp.is_success and resp.content:
+            prefs = resp.json()
+            pid = prefs.get("projectId") if isinstance(prefs, dict) else None
+            if pid:
+                cfg = load_config()
+                cfg["project_id"] = pid
+                save_config(cfg)
+                typer.echo(f"Project ID resolved: {pid}", err=True)
+                return pid
+
+        # Fallback: list projects, pick first with flows
+        url = f"{base}/{oid}/project"
+        resp = httpx.get(url, headers=headers, timeout=30)
+        if resp.is_success:
+            data = resp.json()
+            candidates = [p.get("id") for p in data if p.get("id")] if isinstance(data, list) else []
+            for cpid in candidates:
+                flows_url = f"{base}/{oid}/project/{cpid}/flows"
+                fr = httpx.get(flows_url, headers=headers, params={"size": "1"}, timeout=30)
+                if fr.is_success:
+                    fdata = fr.json()
+                    flist = fdata if isinstance(fdata, list) else fdata.get("flows", fdata.get("items", []))
+                    if flist:
+                        cfg = load_config()
+                        cfg["project_id"] = cpid
+                        save_config(cfg)
+                        typer.echo(f"Project ID resolved: {cpid}", err=True)
+                        return cpid
+            if candidates:
+                cfg = load_config()
+                cfg["project_id"] = candidates[0]
+                save_config(cfg)
+                typer.echo(f"Project ID resolved: {candidates[0]}", err=True)
+                return candidates[0]
+
+        typer.echo("Error: Could not resolve project ID. Use 'wxcc-flow set-project ID'.", err=True)
+        raise typer.Exit(1)
+
+    def _url(self, path: str) -> str:
+        """Build full URL, injecting orgId and projectId only when present in path."""
+        if "{orgId}" in path:
+            path = path.replace("{orgId}", self.org_id)
+        if "{projectId}" in path:
+            path = path.replace("{projectId}", self.project_id)
+        return f"{self._base}{path}"
+
+    def _log_request(self, method: str, url: str, body=None):
+        if self._debug:
+            typer.echo(f">>> {method} {url}", err=True)
+            if body:
+                typer.echo(f">>> Body: {json.dumps(body, indent=2)[:500]}", err=True)
+
+    def _log_response(self, resp: httpx.Response):
+        if self._debug:
+            typer.echo(f"<<< {resp.status_code}", err=True)
+            if resp.content:
+                typer.echo(f"<<< {resp.text[:500]}", err=True)
+
+    def _handle_error(self, resp: httpx.Response):
+        if resp.status_code == 401:
+            typer.echo("Error: Authentication failed (401). Token may be expired — regenerate at developer.webex.com.", err=True)
+            raise typer.Exit(1)
+        if resp.status_code == 403:
+            typer.echo("Error: Forbidden (403). Check org permissions.", err=True)
+            raise typer.Exit(1)
+        if resp.status_code == 400:
+            raise FlowStoreError(400, resp.text)
+        if resp.status_code == 404:
+            typer.echo(f"Error: Not found (404). {resp.text[:200]}", err=True)
+            raise typer.Exit(1)
+        if not resp.is_success:
+            typer.echo(f"Error: HTTP {resp.status_code}: {resp.text[:200]}", err=True)
+            raise typer.Exit(1)
+
+    def get(self, path: str, params: Optional[dict] = None) -> dict:
+        url = self._url(path)
+        self._log_request("GET", url)
+        resp = httpx.get(url, headers=self._headers(), params=params, timeout=30)
+        self._log_response(resp)
+        self._handle_error(resp)
+        return resp.json() if resp.content else {}
+
+    def get_safe(self, path: str, params: Optional[dict] = None):
+        """GET that returns (data, None) on success or (None, status) on error.
+
+        Does not print error messages or raise — caller handles failures.
+        """
+        url = self._url(path)
+        self._log_request("GET", url)
+        resp = httpx.get(url, headers=self._headers(), params=params, timeout=30)
+        self._log_response(resp)
+        if not resp.is_success:
+            return None, resp.status_code
+        data = resp.json() if resp.content else {}
+        return data, None
+
+    def post(self, path: str, json_body=None, params: Optional[dict] = None) -> dict:
+        url = self._url(path)
+        self._log_request("POST", url, json_body)
+        resp = httpx.post(url, headers=self._headers(), json=json_body, params=params, timeout=60)
+        self._log_response(resp)
+        self._handle_error(resp)
+        return resp.json() if resp.content else {}
+
+    def put(self, path: str, json_body=None) -> dict:
+        url = self._url(path)
+        self._log_request("PUT", url, json_body)
+        resp = httpx.put(url, headers=self._headers(), json=json_body, timeout=60)
+        self._log_response(resp)
+        self._handle_error(resp)
+        return resp.json() if resp.content else {}
+
+    def delete(self, path: str) -> dict:
+        url = self._url(path)
+        self._log_request("DELETE", url)
+        resp = httpx.delete(url, headers=self._headers(), timeout=30)
+        self._log_response(resp)
+        self._handle_error(resp)
+        return resp.json() if resp.content else {}
+
+    def get_text(self, path: str) -> str:
+        """GET that returns raw text (for health endpoint)."""
+        url = self._url(path)
+        self._log_request("GET", url)
+        resp = httpx.get(url, headers=self._headers(), timeout=30)
+        self._log_response(resp)
+        self._handle_error(resp)
+        return resp.text
+
+    # --- Convenience path builders ---
+
+    def v1_flows(self) -> str:
+        return f"/{self.org_id}/project/{self.project_id}/flows"
+
+    def v1_flow(self, flow_id: str) -> str:
+        return f"/{self.org_id}/project/{self.project_id}/flows/{flow_id}"
+
+    def v2_flows(self) -> str:
+        return f"/v2/{self.org_id}/project/{self.project_id}/flows"
+
+    def v2_flow(self, flow_id: str) -> str:
+        return f"/v2/{self.org_id}/project/{self.project_id}/flows/{flow_id}"
+
+    def v2_activities(self) -> str:
+        return f"/v2/{self.org_id}/project/{self.project_id}/activities"
+
+    def get_activity_definition(self, name: str) -> dict:
+        """Fetch the full activity definition from the activities list endpoint.
+
+        The per-activity endpoint returns empty properties, so we source from
+        the full registry (dict keyed by category) and find the matching entry.
+        """
+        data = self.get(self.v2_activities())
+        if isinstance(data, dict):
+            for category, activity_list in data.items():
+                if isinstance(activity_list, list):
+                    for act in activity_list:
+                        if act.get("name") == name:
+                            act["category"] = category
+                            return act
+        typer.echo(f"Error: Activity '{name}' not found in the registry.", err=True)
+        raise typer.Exit(1)
