@@ -35,12 +35,14 @@
 | [parse.md](parse.md) | Parse | Extracts values from JSON/XML/TOML/YAML responses |
 | [percentage-allocation.md](percentage-allocation.md) | Percentage Allocation | Splits traffic by percentage (A/B testing, migrations) |
 | [queue-to-agent.md](queue-to-agent.md) | Queue To Agent | Routes contact directly to a specific agent by ID/email |
+| [receive-message.md](receive-message.md) | Receive Message | Waits for a customer message on a BYOC custom messaging channel (**from live registry — Cisco docs beta-gated**) |
 | [record.md](record.md) | Record | Records caller audio (voicemail, confirmations) |
 | [recording-control.md](recording-control.md) | Recording Control | Toggles call recording on/off based on consent |
 | [reservation-start.md](reservation-start.md) | Reservation Start (Event) | Fires when the routing engine reserves an agent for a contact (**stub — pending verification**) |
 | [schedule-callback.md](schedule-callback.md) | Schedule Callback | Registers a future callback request |
 | [screen-pop.md](screen-pop.md) | Screen Pop | Pops a URL to the agent desktop on contact offer |
 | [self-loop-limits.md](self-loop-limits.md) | Self-Loop Limits | System limits on activity self-loops to prevent infinites |
+| [send-custom-message.md](send-custom-message.md) | Send Custom Message | Sends a message on a BYOC custom messaging channel (**from live registry — Cisco docs beta-gated**) |
 | [send-digits.md](send-digits.md) | Send Digits | Sends DTMF tones during an active call |
 | [set-announcement.md](set-announcement.md) | Set Announcement | Configures compliance, greeting, and whisper announcements |
 | [set-caller-id.md](set-caller-id.md) | Set Caller ID | Customizes outbound caller ID for transfers |

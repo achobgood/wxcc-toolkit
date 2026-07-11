@@ -188,6 +188,8 @@ Exit ports per activity type. These determine the rows in the Connections sectio
 | HTTP Connector | Default, Error (auto-handled — no edge) |
 | Outdial Entry Point | (none — restricted context) |
 | Call Progress Analysis | CPA Successful, Error (auto-handled — no edge) |
+| Receive Message | Timeout, Error (auto-handled — no edge) — BYOC custom messaging; ports from live registry, no success port listed |
+| Send Custom Message | Error (auto-handled — no edge) — BYOC custom messaging; ports from live registry, no success port listed |
 | Event handlers (all) | Out |
 
 ## XML Templates

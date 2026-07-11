@@ -226,3 +226,5 @@ When a user's need doesn't map to a standard pattern above, use this table to id
 | Disconnect Contact | Hang up the call — required at every exit path | essentials |
 | Business Hours | Route by schedule (working hours, holidays, overrides) | business-hours.md |
 | Callback | Immediate callback — caller hangs up, system calls back | callback.md |
+| Receive Message | Wait for a customer message on a BYOC custom messaging channel (beta; Cisco docs gated) | receive-message.md |
+| Send Custom Message | Send a message on a BYOC custom messaging channel (beta; Cisco docs gated) | send-custom-message.md |

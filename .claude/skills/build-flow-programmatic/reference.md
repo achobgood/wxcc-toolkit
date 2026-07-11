@@ -371,7 +371,7 @@ Template:
 
 1. **queueId vs destination**: The choices API uses `destination` but the validator requires `queueId`. Use `wxcc-flow choices queue-contact destination` to find values, put them in `queueId`.
 2. **RadioGroupWithValue suffix fields**: Fields like `callbackQueue`, `scheduleTimezone`, `surveyMethod` need `:radioName` and `_radioName` suffix fields alongside the value.
-3. **Feature-gated activities**: `flow-test-activity`, `LiveCallerSentiment`, `queue-reservation` return ACTIVITY_NOT_FOUND on create despite passing validation.
+3. **Feature-gated activities**: `flow-test-activity`, `LiveCallerSentiment`, `queue-reservation` historically returned ACTIVITY_NOT_FOUND on create despite passing validation; as of 2026-07-11 they are gone from the live prod registry entirely (52 activities). Do not use them in FlowIR.
 4. **Subflows not importable**: `flowType: "SUBFLOW"` is ignored by the import API. `end-subflow` returns ACTIVITY_NOT_FOUND. Use `end` as substitute.
 5. **fn-activity and subflow-handoff**: Require entity IDs (function ID, subflow ID) that must be created manually in the UI first.
 6. **Activity output variable references (FC1038)**: `{{ActivityName.OutputVar}}` expressions fail FlowIR validation. Key design patterns to avoid FC1038:

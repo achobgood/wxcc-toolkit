@@ -1,4 +1,4 @@
-<!-- ref-tag: fd-flowir-v2 -->
+<!-- ref-tag: fd-flowir-v3 -->
 
 # Flow Designer FlowIR Reference
 
@@ -424,7 +424,7 @@ Same pattern as bridged-transfer but no `timeout` (the call is fully transferred
 
 Group: `enum-gateway`. Output ports: `workingHours`, `holidays`, `override`, `default`, `error`.
 
-Use `get_choices` API with `activity_name=business-hours`, `input_name=businessHoursId` to list available schedules.
+Use `wxcc-flow choices business-hours businessHoursId` to list available schedules.
 
 ### disconnect-contact — ✅ TESTED
 
@@ -452,7 +452,7 @@ Terminal node — no output ports. Multiple disconnect nodes per flow are valid 
 }
 ```
 
-The `queueId` property is the ONLY required field. It accepts a queue UUID, a queue name, or a `{{variable}}` expression. The server auto-resolves the queue type, routing algorithm, and all internal fields. Resolve available queue values via `get_choices` with `input_name=destination` (the API input name is `destination`, but the node property the validator checks is `queueId`).
+The `queueId` property is the ONLY required field. It accepts a queue UUID, a queue name, or a `{{variable}}` expression. The server auto-resolves the queue type, routing algorithm, and all internal fields. Resolve available queue values via `wxcc-flow choices queue-contact destination` (the API input name is `destination`, but the node property the validator checks is `queueId`).
 
 **With optional fields:**
 
@@ -481,7 +481,7 @@ The `queueId` property is the ONLY required field. It accepts a queue UUID, a qu
 - `queueRadioGroup: "variableQueue"` requires `destinationVariable` AND `skills` (even if null) AND `queueId` — omitting `skills` fails with FC1015 "Required field 'skills' is not configured".
 - Omitting `queueRadioGroup` entirely lets `queueId` work as a complete shorthand with zero additional fields.
 
-**Why `destination` alone fails:** The v2 import/validate API checks for `queueId` as the queue selection field. The `destination` property is the UI/export format — it appears in exported flows but is NOT what the validator checks on import. The activity definition API lists `destination` as the input name (and `get_choices` uses `input_name=destination`), but the actual node property the validator requires is `queueId`. This is a naming mismatch between the activity definition layer and the validation layer.
+**Why `destination` alone fails:** The v2 import/validate API checks for `queueId` as the queue selection field. The `destination` property is the UI/export format — it appears in exported flows but is NOT what the validator checks on import. The activity definition API lists `destination` as the input name (and the choices API takes input `destination`), but the actual node property the validator requires is `queueId`. This is a naming mismatch between the activity definition layer and the validation layer.
 
 **What exported flows look like:** When a flow is created via the `queueId` shorthand (no `queueRadioGroup`), the export preserves the shorthand format — `queueId` is present and no `destination`/`queueRadioGroup` expansion occurs. This means re-importing an exported flow that was created via FlowIR works without modification. However, flows created via the Flow Designer UI export with the full property set (`destination`, `destination:name`, `destination_name`, `destination:type`, `destination_type`, `queueRadioGroup`, etc.) — re-importing those DOES require adding `queueId`.
 
@@ -716,7 +716,7 @@ Output ports: `default`, `error`.
 
 ## 7b. Additional Activity Properties
 
-Required-property tables for activities not covered by the full snippets in § 7. Parsed from the activity definitions API (`get_activity_definitions`). The `flowDecryptAccess` toggle (boolean, optional, default `false`) appears on nearly every activity — it is omitted from the tables below for brevity.
+Required-property tables for activities not covered by the full snippets in § 7. Parsed from the activity definition API (`wxcc-flow describe`). The `flowDecryptAccess` toggle (boolean, optional, default `false`) appears on nearly every activity — it is omitted from the tables below for brevity.
 
 ### screen-pop (Screen Pop) — ✅ TESTED
 
@@ -774,7 +774,7 @@ Required-property tables for activities not covered by the full snippets in § 7
 | `destinationLookupType` | string | Yes | `agentEmail` or `agentId` (from choices API) |
 | `channelType` | string | Yes | `TELEPHONY`, `CHAT`, etc. (default `TELEPHONY`) |
 | `queueRadioGroup` | string | No | `staticQueue` (default) |
-| `reportingQueue` | string | Yes | Queue UUID for reporting — resolve via `get_choices` |
+| `reportingQueue` | string | Yes | Queue UUID for reporting — resolve via `wxcc-flow choices` |
 | `reportingQueue:name` | string | Yes | Queue display name |
 | `reportingQueue_name` | string | Yes | Same value, alternate format |
 | `destinationReportingQueueVariable` | string | Conditional | Variable alternative — required only when using variable mode |
@@ -806,8 +806,8 @@ Required-property tables for activities not covered by the full snippets in § 7
 
 | Property | Type | Required | Notes |
 |----------|------|----------|-------|
-| `channelType` | string | Yes | `TELEPHONY`, `CHAT`, etc. (default `TELEPHONY`). Not exposed via `get_choices` — set directly |
-| `destination` | string | Yes | RadioGroupWithValue — queue UUID or `{{variable}}`. `get_choices` returns "RadioGroupWithValue not supported" — resolve queue UUIDs via `get_choices` on `queue-contact` `destination` instead |
+| `channelType` | string | Yes | `TELEPHONY`, `CHAT`, etc. (default `TELEPHONY`). Not exposed via the choices API — set directly |
+| `destination` | string | Yes | RadioGroupWithValue — queue UUID or `{{variable}}`. The choices API returns "RadioGroupWithValue not supported" — resolve queue UUIDs via `wxcc-flow choices queue-contact destination` instead |
 | `destination:radioName` | string | Yes | `setToValue` (literal UUID) or `setToVariable` (variable ref) |
 | `destination_radioName` | string | Yes | Same value, alternate format |
 | `ewtLookbackMinutes` | int | Yes | Lookback window in minutes for EWT calculation (range: 5–240) |
@@ -839,9 +839,9 @@ Output variables: `PIQ`, `EWT`, `status`, `CallsQueuedNow`, `OldestCallTime`, `L
 
 | Property | Type | Required | Notes |
 |----------|------|----------|-------|
-| `channelType` | string | Yes | `TELEPHONY`, `CHAT`, etc. (default `TELEPHONY`). Not exposed via `get_choices` — set directly |
+| `channelType` | string | Yes | `TELEPHONY`, `CHAT`, etc. (default `TELEPHONY`). Not exposed via the choices API — set directly |
 | `queueRadioGroup` | string | No | RadioGroup: `staticQueue` or `variableQueue`. Can be omitted — `destination` works without it |
-| `destination` | string | Conditional | Select — queue UUID (when `staticQueue`). Resolve via `get_choices` with `input_name=destination`. Uses Select pattern (`:name`/`_name` suffix) |
+| `destination` | string | Conditional | Select — queue UUID (when `staticQueue`). Resolve via `wxcc-flow choices` on input `destination`. Uses Select pattern (`:name`/`_name` suffix) |
 | `destination:name` | string | Conditional | Queue display name |
 | `destination_name` | string | Conditional | Same value, alternate format |
 | `destinationVariable` | string | Conditional | VariableSelect — variable containing queue UUID (when `variableQueue`) |
@@ -1024,7 +1024,7 @@ Output ports are dynamic — one per allocation entry (using the `desc` value as
 
 No configurable properties. Enable by placing the activity in the flow.
 
-**Gotcha:** The activity definition exists in the schema catalog (`describe` and `schema` work), but creation fails with `ACTIVITY_NOT_FOUND` on orgs without the Live Caller Sentiment feature provisioned. Validation reports `valid: true` but includes a 500-level warning about the missing activity mapping.
+**Gotcha (historical):** When this activity was still listed, its definition existed in the schema catalog but creation failed with `ACTIVITY_NOT_FOUND` on orgs without the Live Caller Sentiment feature provisioned (validation reported `valid: true` with a 500-level warning about the missing activity mapping). As of 2026-07-11 it is absent from the live prod registry entirely — `wxcc-flow describe`/`schema` now return "not found in the registry".
 
 ### queue-reservation (Queue Reservation) — ⚠️ FEATURE-GATED
 
@@ -1035,7 +1035,7 @@ No configurable properties. Enable by placing the activity in the flow.
 | `priority` | int | Conditional | Select: P1=1 through P9=9 — required when `priorityRadioGroup` is `staticPriority` |
 | `priorityVariable` | int | Conditional | VariableSelect — required when `priorityRadioGroup` is `variablePriority` |
 
-**Warning:** This activity appears in the registry metadata but returns `ACTIVITY_NOT_FOUND` on `get_choices` (HTTP 400) and `create` (HTTP 500). Validation passes with a 500-level warning. Same behavior as `flow-test-activity` and `LiveCallerSentiment` — likely feature-gated or not provisioned on all tenants. Properties above are from the registry definition and have NOT been validated via round-trip.
+**Warning (historical):** When this activity was still listed, it returned `ACTIVITY_NOT_FOUND` on choices lookups (HTTP 400) and `create` (HTTP 500); validation passed with a 500-level warning. Same behavior as `flow-test-activity` and `LiveCallerSentiment`. As of 2026-07-11 it is absent from the live prod registry entirely — `wxcc-flow describe`/`schema` now return "not found in the registry". Properties above are from the historical registry definition and have NOT been validated via round-trip.
 
 Output variables (from definition): `QueueId`, `status`, `FailureCode`, `FailureDescription`.
 
@@ -1056,7 +1056,7 @@ Output variables (from definition): `QueueId`, `status`, `FailureCode`, `Failure
 | `agentAvailabilityVariable` | boolean | Yes | Variable for availability check |
 | `skills` | object | Yes | Skill requirements and relaxation config |
 
-**Warning:** This activity appears in the registry metadata but returns `ACTIVITY_NOT_FOUND` on both `get_choices` and `create` (HTTP 500). Validation passes with a warning. Likely feature-gated or deprecated — properties above are from the registry definition and have NOT been validated via round-trip.
+**Warning (historical):** When this activity was still listed, it returned `ACTIVITY_NOT_FOUND` on both choices lookups and `create` (HTTP 500); validation passed with a warning. As of 2026-07-11 it is absent from the live prod registry entirely — `wxcc-flow describe`/`schema` now return "not found in the registry". Properties above are from the historical registry definition and have NOT been validated via round-trip.
 
 ### Feedback (Feedback) — ✅ TESTED
 
@@ -1120,7 +1120,7 @@ Output variables (from definition): `QueueId`, `status`, `FailureCode`, `Failure
 
 | Property | Type | Required | Notes |
 |----------|------|----------|-------|
-| `connector` | string | Yes | CCAI connector UUID — resolve via `get_choices`. Uses Select pattern |
+| `connector` | string | Yes | CCAI connector UUID — resolve via `wxcc-flow choices`. Uses Select pattern |
 | `connector:name` | string | Yes | Connector display name |
 | `connector_name` | string | Yes | Same value, alternate format |
 | `interruptible` | boolean | Yes | Allow caller to interrupt prompts (default `false`) |
@@ -1147,7 +1147,7 @@ Output variables (from definition): `QueueId`, `status`, `FailureCode`, `Failure
 
 | Property | Type | Required | Notes |
 |----------|------|----------|-------|
-| `connectorId` | string | Yes | Custom Connector UUID — resolve via `get_choices`. Uses Select pattern |
+| `connectorId` | string | Yes | Custom Connector UUID — resolve via `wxcc-flow choices`. Uses Select pattern |
 | `connectorId:name` | string | Yes | Connector display name |
 | `connectorId_name` | string | Yes | Same value, alternate format |
 | `httpRequestPath` | string | No | Path appended to connector base URL (e.g. `/api/test`) |
@@ -1183,7 +1183,7 @@ No configurable properties. Terminal node for flows that need an explicit end wi
 
 ### Event (Event Handler)
 
-No configurable input properties. Event handlers are configured via the `eventFlows` section — see § 6. The event node properties (`eventSourceName`, `eventClassificationName`, `eventSpecificationName`) are set in the node's `properties` block, not via inputGroups.
+No configurable input properties. Event handlers are configured via the `eventFlows` section — see § 6. The event node properties (`eventSourceName`, `eventClassificationName`, `eventSpecificationName`) are set in the node's `properties` block — they do not appear as inputs in the activity definition.
 
 ## 8. Complete Activity Registry
 
@@ -1379,11 +1379,11 @@ Both `id` and `name` work in edge `from`/`to` fields. After saving, the server n
 
 ### MCP list_flows Bug
 
-The MCP server's `list_flows` tool returns empty arrays even when flows exist. The REST API `GET /{orgId}/project/{projectId}/flows` works correctly.
+The MCP server's `list_flows` tool returns empty arrays even when flows exist. Use `wxcc-flow list` (which paginates the REST API `GET /{orgId}/project/{projectId}/flows` — the server defaults to `size=10` and silently truncates) instead.
 
 ### RadioGroupWithValue Pattern
 
-Properties using `RadioGroupWithValue` (identified by the `get_choices` API returning a 400 error for that input) require suffix fields alongside the value:
+Properties using `RadioGroupWithValue` (identified by the choices API returning a 400 error for that input) require suffix fields alongside the value:
 
 ```json
 {
@@ -1405,11 +1405,11 @@ Properties using `RadioGroup` (NOT `RadioGroupWithValue`) accept the value direc
 }
 ```
 
-Identified by the `get_choices` API returning a 400 with "is a 'RadioGroup' which does not support choices." Activities confirmed to use this pattern: `generate-otp` (`pinFormat`), `screen-pop` (`target`).
+Identified by the choices API returning a 400 with "is a 'RadioGroup' which does not support choices." Activities confirmed to use this pattern: `generate-otp` (`pinFormat`), `screen-pop` (`target`).
 
 ### Select Pattern (Dual-Format Name Fields)
 
-Properties using `Select` type (identified by `get_choices` returning valid choices) require name suffix fields:
+Properties using `Select` type (identified by the choices API returning valid choices) require name suffix fields:
 
 ```json
 {
@@ -1423,7 +1423,7 @@ For entity references (queues, connectors), the value is a UUID and the name is 
 
 ### Implicit Output Ports
 
-Some activities accept edge conditions that aren't reported by the `describe` command or `get_activity_definitions` API. Known cases:
+Some activities accept edge conditions that aren't reported by the `describe` command or the activity definition API. Known cases:
 - `generate-otp`: has an `out` success port (registry only lists `error`)
 - `screen-pop`: has an `out` success port (registry lists no ports)
 
@@ -1431,10 +1431,9 @@ When building flows, if an activity logically continues to the next step, try th
 
 ### Feature-Gated Activities
 
-Some activities appear in the registry metadata (returned by `get_activity_definitions`) but are not available for all orgs. Known cases:
-- `flow-test-activity`: returns `ACTIVITY_NOT_FOUND` (HTTP 500) on both `get_choices` and `create`
+Historically, some activities appeared in the registry metadata but were not available for all orgs — `flow-test-activity`, `LiveCallerSentiment`, and `queue-reservation` returned `ACTIVITY_NOT_FOUND` on choices lookups and `create` while validation passed with a warning ("Validation pipeline error"). As of 2026-07-11 all three are gone from the live prod registry (see § 12 Feature-Gated Activities).
 
-Validation may pass with a warning ("Validation pipeline error") for these activities, but creation will fail. Check with `get_choices` for any required Select-type field before investing in a full flow — a 400 "Activity not found" error is the signal.
+If a listed activity behaves this way in the future, the signal is a 400 "Activity not found" from `wxcc-flow choices` on any required Select-type field — check before investing in a full flow.
 
 ### Subflow Creation Not Supported via FlowIR Import
 
@@ -1442,7 +1441,7 @@ The `flowType: "SUBFLOW"` field in FlowIR is ignored by the import endpoint — 
 
 **Consequence:** `subflow-handoff` and `fn-activity` cannot be fully round-trip tested via the CLI because they require entity IDs (subflow ID, function ID) that can't be created programmatically. These activities remain "FROM REGISTRY" / "FROM REAL FLOW" in § 7. To validate them, create the subflow/function manually in the UI, then reference the entity ID in FlowIR.
 
-The `SubflowVersionSelect` component type used by `subflow-handoff`'s `subflowVersion` field does not support the `get_choices` API — it returns a 400 error.
+The `subflowVersion` field of `subflow-handoff` (component type `SubflowVersionSelect`, per the choices 400 error — the flat prod definition does not name component types) does not support the choices API — it returns a 400 error.
 
 ### Required Fields May Not Be Truly Conditional
 
@@ -1454,9 +1453,9 @@ Some fields marked as conditional in the activity definition are actually always
 ### Property Name Mismatches Between API Layers
 
 Some activities have different property names in the activity definition API vs. the validation/import API. Known cases:
-- `queue-contact`: The activity definition and `get_choices` API use `destination` as the input name, but the validator requires `queueId` as the node property. Using `destination` without `queueId` always fails with FC1015 "Required field 'Queue' is not configured". Use `queueId` for authoring; use `get_choices` with `input_name=destination` to resolve available queues.
+- `queue-contact`: The activity definition and choices API use `destination` as the input name, but the validator requires `queueId` as the node property. Using `destination` without `queueId` always fails with FC1015 "Required field 'Queue' is not configured". Use `queueId` for authoring; use `wxcc-flow choices queue-contact destination` to resolve available queues.
 - `queue-contact`: Including `queueRadioGroup` activates "UI mode" validation that requires `destination` + all dual-format fields IN ADDITION TO `queueId`. Omit `queueRadioGroup` entirely to let `queueId` work as a complete shorthand.
-- `percent-allocation`: The activity definition API reports `allocations` as type `string[]` with component `PercentAllocation` and a default of `["{\"percent\":100,\"desc\":\"Allocation Default\"}"]` (an array of stringified JSON objects). The import validator rejects this format — it fails with "Percent allocation values must sum to 100 (current sum: 0.0)". The validator only accepts actual object arrays: `[{"percent":60,"desc":"PathA"},{"percent":40,"desc":"PathB"}]`. Use `object[]` semantics despite the API declaring `string[]`.
+- `percent-allocation`: The activity definition API reports `allocations` as type `string[]` (the PercentAllocation component — the flat prod definition does not name it) with a default of `["{\"percent\":100,\"desc\":\"Allocation Default\"}"]` (an array of stringified JSON objects). The import validator rejects this format — it fails with "Percent allocation values must sum to 100 (current sum: 0.0)". The validator only accepts actual object arrays: `[{"percent":60,"desc":"PathA"},{"percent":40,"desc":"PathB"}]`. Use `object[]` semantics despite the API declaring `string[]`.
 - `set-announcement`: Older definition layers returned TWO inputs named `attributeTag` — feature-flag variants distinguished by `flagName=wxcc_record_agent_personal_greeting` ("Attribute tag", not required, when `flagValue=off,control`; "Greeting Purpose", required, defaultValue="Default", when `flagValue=on`). The live prod registry (2026-07-11) resolves the flag server-side and returns ONE `attributeTag` (required, defaultValue="Default", shown when `toggleAgentGreeting == true`). When `toggleAgentGreeting` is `true`, omitting `attributeTag` fails validation.
 
 ### Cascading Choices
@@ -1486,8 +1485,8 @@ The activity definition API uses different component types for input fields. Eac
 |-----------|---------------|----------------------|
 | **Select** | Value + `:name`/`_name` suffix fields. For entity refs (queues, connectors): value=UUID, name=display name. For enums (methods, content types): value and name are the same. | `wxcc-flow choices <activity> <field>` |
 | **RadioGroup** | Direct value, no suffix fields. E.g., `"priorityRadioGroup": "staticPriority"` | Options visible in `wxcc-flow describe` output or try common values |
-| **RadioGroupWithValue** | Value + `:radioName`/`_radioName` suffix fields. `setToValue` for static, `setToVariable` for variable ref. | `wxcc-flow describe` shows the component type; `choices` returns 400 identifying the type |
-| **VariableSelect** | Flow variable reference using `{{varName}}` syntax. Declare the variable in the flow's `variables` array with the correct type. | `wxcc-flow describe` shows `filterType` (e.g., `boolean`, `string`) |
+| **RadioGroupWithValue** | Value + `:radioName`/`_radioName` suffix fields. `setToValue` for static, `setToVariable` for variable ref. | `choices` returns 400 naming the component type (the flat prod definition does not) |
+| **VariableSelect** | Flow variable reference using `{{varName}}` syntax. Declare the variable in the flow's `variables` array with the correct type. | The flat prod definition gives only `type` — match the variable's type to what the field expects (see the activity's property table) |
 | **Toggle** | Boolean `true`/`false`. Often controls visibility of other fields via `showOnCondition`. | Check `defaultValue` in describe output |
 | **Input** | Direct value (string or number). May have `validationRegex` constraints. | Check describe output for defaults and constraints |
 | **CheckBox** | Boolean `true`/`false`. | Same as Toggle |
