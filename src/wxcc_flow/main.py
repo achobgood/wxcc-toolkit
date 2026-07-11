@@ -302,11 +302,18 @@ def validate(
 @app.command()
 def publish(
     flow_id: str = typer.Argument(..., help="Flow ID"),
+    validate_first: bool = typer.Option(False, "--validate",
+        help="Also run server-side validation at publish time. Off by "
+             "default: the CLI workflow validates explicitly beforehand "
+             "('wxcc-flow validate'), and publish-time validation can "
+             "false-positive (e.g. FC1015 on hand-off flows)."),
     debug: bool = typer.Option(False, "--debug"),
 ):
-    """Publish a flow draft."""
+    """Publish a flow draft (add --validate to validate at publish time)."""
     c = _client(debug)
-    data = c.post(f"{c.v1_flow(flow_id)}:publish", json_body={}, params={"skipValidation": "true"})
+    skip = "false" if validate_first else "true"
+    data = c.post(f"{c.v1_flow(flow_id)}:publish", json_body={},
+                  params={"skipValidation": skip})
     typer.echo(f"Published flow {flow_id}")
     if data:
         print_json(data)

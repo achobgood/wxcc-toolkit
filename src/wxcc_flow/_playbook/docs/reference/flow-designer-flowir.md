@@ -1301,10 +1301,10 @@ Confirm the flow was created with all nodes, edges, and resolved properties.
 ### Step 5: Publish (Optional)
 
 ```
-POST /{orgId}/project/{projectId}/flows/{flowId}:publish
+POST /{orgId}/project/{projectId}/flows/{flowId}:publish?skipValidation=true
 ```
 
-Publishes the draft. Only available via REST API, not MCP.
+Publishes the draft. Only available via REST API, not MCP. `skipValidation` (default `false` on the server) controls whether the server re-validates at publish time. `wxcc-flow publish` skips it by default because the CLI workflow validates explicitly beforehand (`wxcc-flow validate`) and publish-time validation can false-positive (e.g. FC1015 on hand-off flows); pass `wxcc-flow publish FLOW_ID --validate` to validate at publish time instead (both paths verified live 2026-07-11).
 
 ## 10. Common Validation Errors
 

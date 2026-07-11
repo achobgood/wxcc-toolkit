@@ -193,7 +193,7 @@ Both use RadioGroupWithValue for `transfertodn` — use `setToValue` for literal
 }
 ```
 
-Connector values are named constants, NOT UUIDs: `NATIVE_ADVANCED_VIRTUAL_AGENT` (Autonomous) or `NATIVE_BASIC_VIRTUAL_AGENT` (Scripted). Resolve agent IDs via REST API with cascading parent — `wxcc-flow choices` CLI does not support this. Output ports: `ENDED`, `ESCALATE`, `error`.
+Connector values are named constants, NOT UUIDs: `NATIVE_ADVANCED_VIRTUAL_AGENT` (Autonomous) or `NATIVE_BASIC_VIRTUAL_AGENT` (Scripted). Resolve agent IDs via cascading choices: `wxcc-flow choices ivr-virtualassistantvoice virtualAgentId --parent-input connector --parent-value NATIVE_ADVANCED_VIRTUAL_AGENT`. Output ports: `ENDED`, `ESCALATE`, `error`.
 
 ### Case Statement (case-statement)
 
