@@ -195,28 +195,40 @@ class FlowClient:
     def v1_flow(self, flow_id: str) -> str:
         return f"/{self.org_id}/project/{self.project_id}/flows/{flow_id}"
 
+    # ⚠️ PATH STRUCTURE — DO NOT "FIX" BACK. The `v2` segment comes AFTER
+    # project/{projectId}, NOT before {orgId}. The intuitive-looking
+    # `/v2/{org}/project/{proj}/...` form is what the CLI shipped with and it
+    # 500s on prod — a 500 here means the path is UNROUTED, not a server bug.
+    # If these ops ever 500/404 again, the paths moved: re-pull the LIVE
+    # contract `GET {base}/v3/api-docs` and diff, don't theorize. (This exact
+    # mismatch cost hours on 2026-07-11.)
     def v2_flows(self) -> str:
-        return f"/v2/{self.org_id}/project/{self.project_id}/flows"
+        return f"/{self.org_id}/project/{self.project_id}/v2/flows"
 
     def v2_flow(self, flow_id: str) -> str:
-        return f"/v2/{self.org_id}/project/{self.project_id}/flows/{flow_id}"
+        return f"/{self.org_id}/project/{self.project_id}/v2/flows/{flow_id}"
 
     def v2_activities(self) -> str:
-        return f"/v2/{self.org_id}/project/{self.project_id}/activities"
+        return f"/{self.org_id}/project/{self.project_id}/v2/activities"
 
     def get_activity_definition(self, name: str) -> dict:
         """Fetch the full activity definition from the activities list endpoint.
 
-        The per-activity endpoint returns empty properties, so we source from
-        the full registry (dict keyed by category) and find the matching entry.
+        Prod returns a flat list of activities keyed by `activityName`. (Older
+        deployments returned a dict keyed by category with a `name` field —
+        handled for back-compat.)
         """
         data = self.get(self.v2_activities())
-        if isinstance(data, dict):
+        if isinstance(data, list):
+            for act in data:
+                if isinstance(act, dict) and act.get("activityName") == name:
+                    return act
+        elif isinstance(data, dict):
             for category, activity_list in data.items():
                 if isinstance(activity_list, list):
                     for act in activity_list:
-                        if act.get("name") == name:
-                            act["category"] = category
+                        if act.get("activityName") == name or act.get("name") == name:
+                            act.setdefault("category", category)
                             return act
         typer.echo(f"Error: Activity '{name}' not found in the registry.", err=True)
         raise typer.Exit(1)

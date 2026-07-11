@@ -106,7 +106,7 @@ Token resolution: `WXCC_FLOW_TOKEN` env → `WEBEX_ACCESS_TOKEN` env → `~/.wxc
 | `wxcc-flow create file.json` | Import/create flow from FlowIR |
 | `wxcc-flow save-draft FLOW_ID file.json` | Save FlowIR as draft |
 | `wxcc-flow publish FLOW_ID` | Publish a draft (REST-only) |
-| `wxcc-flow activities` | List all 53 activities |
+| `wxcc-flow activities` | List all activities (52 on prod as of 2026-07-11) |
 | `wxcc-flow describe ACTIVITY` | Activity properties and schema |
 | `wxcc-flow global-vars` | List org global variables |
 
@@ -116,7 +116,9 @@ All commands support `--debug` for raw HTTP traces and `-o json` for JSON output
 
 | Limitation | Workaround |
 |------------|------------|
-| `wxcc-flow choices` does not support cascading/parent field values (e.g., `virtualAgentId` depends on `connector` selection) | Use REST API directly: `GET /v2/{org}/project/{proj}/activities/{name}/inputs/{input}/choices?parentInputName={parent}&parentValue={value}` |
+| `wxcc-flow events` cannot list the event-spec catalog — prod exposes no event-spec endpoint | Get event names from an exported flow's `eventFlows` (`wxcc-flow export FLOW_ID`) or `docs/reference/flow-designer-flowir.md` § 6 |
+
+(Cascading/parent choices are supported since 2026-07-11: `wxcc-flow choices ACTIVITY INPUT --parent-input PARENT --parent-value VALUE`.)
 
 ### Programmatic Flow Building Workflow
 
@@ -128,7 +130,7 @@ wxcc-flow create flow.json                        # import to sandbox
 wxcc-flow publish FLOW_ID                         # publish draft
 ```
 
-See `docs/reference/flow-designer-flowir.md` for FlowIR format, tested activity property patterns, and the complete 53-activity registry.
+See `docs/reference/flow-designer-flowir.md` for FlowIR format, tested activity property patterns, and the complete activity registry.
 
 ### Pre-approved in Claude Code
 

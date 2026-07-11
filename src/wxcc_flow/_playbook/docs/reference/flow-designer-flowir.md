@@ -9,19 +9,26 @@ FlowIR is Cisco's intermediate representation format for Flow Designer flows. It
 Base URL: `https://flow-store.produs1.ciscoccservice.com/flow-store`
 Auth: `Authorization: Bearer <token>` header
 
+> ⚠️ **Path structure (verified live on produs1, 2026-07-11):** the `v2` segment comes **after**
+> `project/{projectId}`, NOT before `{orgId}`. The `/v2/{orgId}/project/{projectId}/...` form 500s on
+> prod (unrouted path). If these ever 500/404, re-pull the live contract `GET {base}/v3/api-docs` and diff.
+> "FlowIR" is our coined term; Cisco's schema is **FlowV2** (FDL 2.0).
+
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/v2/{orgId}/project/{projectId}/flows:import` | Create flow from FlowIR |
-| POST | `/v2/{orgId}/project/{projectId}/flows:validate` | Dry-run validate FlowIR (no save) |
-| GET | `/v2/{orgId}/project/{projectId}/flows/{flowId}:export` | Export flow as FlowIR |
-| GET | `/v2/{orgId}/project/{projectId}/flows/{flowId}/draft` | Get draft as FlowIR |
-| POST | `/v2/{orgId}/project/{projectId}/flows/{flowId}/draft` | Save draft from FlowIR |
-| GET | `/v2/{orgId}/project/{projectId}/activities` | List activity definitions |
-| GET | `/v2/{orgId}/project/{projectId}/activities/{name}` | Describe one activity |
-| GET | `/v2/{orgId}/project/{projectId}/activities/{name}/schema` | FlowIR node schema |
-| GET | `/v2/{orgId}/project/{projectId}/activities/{name}/inputs/{input}/choices` | Dropdown values |
+| POST | `/{orgId}/project/{projectId}/v2/flows:import?overwrite=` | Create flow from FlowV2 → `201`, returns `{"flow":{...}}` |
+| POST | `/{orgId}/project/{projectId}/v2/flows:validate` | Dry-run validate FlowV2 (no save) → `{valid, errors, warnings}` |
+| GET | `/{orgId}/project/{projectId}/v2/flows/{flowId}` | Read flow as FlowV2 (use this for export/draft) |
+| POST | `/{orgId}/project/{projectId}/v2/flows/{flowId}?expectedVersion=N` | Save draft from FlowV2 (optimistic lock; **no `/draft` suffix**) |
+| GET | `/{orgId}/project/{projectId}/v2/flows/{flowId}:validate` | Validate a persisted flow → `{valid, results}` |
+| GET | `/{orgId}/project/{projectId}/v2/activities` | List activity definitions (flat list, keyed by `activityName`) |
+| GET | `/{orgId}/project/{projectId}/v2/activities/{name}` | Describe one activity |
+| GET | `/{orgId}/project/{projectId}/v2/activities/{name}/inputs/{input}/choices` | Dropdown values |
 
 The `orgId` and `projectId` are required in all paths. Resolve `projectId` via `GET /{orgId}/project`.
+Dead route: `GET .../v2/flows/{flowId}:export` returns `400 "Invalid flowId"` even on published flows —
+use the read endpoint (`GET .../v2/flows/{flowId}`) instead. There is no `.../activities/{name}/schema`
+endpoint on prod.
 
 ## 2. FlowIR Structure
 
@@ -619,7 +626,7 @@ Same connector pattern as play-message and ivr-menu. Output ports: `default` (di
 }
 ```
 
-**Gotcha:** `terminationDelay` is in seconds (0-30), NOT milliseconds. Default is `30`. The `connector` field uses the Select pattern (`:name`/`_name` suffix) but the VALUE is a named constant (`NATIVE_ADVANCED_VIRTUAL_AGENT` or `NATIVE_BASIC_VIRTUAL_AGENT`), NOT a UUID. Available connector values: `NATIVE_ADVANCED_VIRTUAL_AGENT` (Webex AI Agent Autonomous) and `NATIVE_BASIC_VIRTUAL_AGENT` (Webex AI Agent Scripted). The `virtualAgentId` field requires a cascading choice — you must provide the connector value as a parent parameter to get the list of available agents. The `wxcc-flow choices` CLI does not support cascading choices; use the REST API directly: `GET /v2/{org}/project/{proj}/activities/ivr-virtualassistantvoice/inputs/virtualAgentId/choices?parentInputName=connector&parentValue=NATIVE_ADVANCED_VIRTUAL_AGENT`.
+**Gotcha:** `terminationDelay` is in seconds (0-30), NOT milliseconds. Default is `30`. The `connector` field uses the Select pattern (`:name`/`_name` suffix) but the VALUE is a named constant (`NATIVE_ADVANCED_VIRTUAL_AGENT` or `NATIVE_BASIC_VIRTUAL_AGENT`), NOT a UUID. Available connector values: `NATIVE_ADVANCED_VIRTUAL_AGENT` (Webex AI Agent Autonomous) and `NATIVE_BASIC_VIRTUAL_AGENT` (Webex AI Agent Scripted). The `virtualAgentId` field requires a cascading choice — you must provide the connector value as a parent parameter to get the list of available agents: `wxcc-flow choices ivr-virtualassistantvoice virtualAgentId --parent-input connector --parent-value NATIVE_ADVANCED_VIRTUAL_AGENT` (REST equivalent: `GET /{org}/project/{proj}/v2/activities/ivr-virtualassistantvoice/inputs/virtualAgentId/choices?parentInputName=connector&parentValue=NATIVE_ADVANCED_VIRTUAL_AGENT`).
 
 Output ports: `ENDED`, `ESCALATE`, `error`.
 
@@ -1180,7 +1187,7 @@ No configurable input properties. Event handlers are configured via the `eventFl
 
 ## 8. Complete Activity Registry
 
-All 53 activities available in the Flow Designer activity registry, with their category, required `group` field, and output port conditions.
+All activities in the Flow Designer activity registry, with their category, required `group` field, and output port conditions. The live prod registry (`GET .../v2/activities`, verified 2026-07-11) returns **52** activities: the three ⚠️ FEATURE-GATED entries below (`queue-reservation`, `LiveCallerSentiment`, `flow-test-activity`) no longer appear in it, and `ReceiveMessage` / `SendCustomMessage` (custom-messaging channel) do.
 
 ### Core Activities
 
@@ -1215,12 +1222,14 @@ All 53 activities available in the Flow Designer activity registry, with their c
 | `start-media-stream` | Start Media Stream | `action` | `failure` |
 | `send-digits` | Send Digits | `action` | `failure` |
 | `call-progress-analysis` | Call Progress Analysis | `action` | `failure` |
-| `LiveCallerSentiment` | Live Caller Sentiment | `action` | `failure` |
+| `LiveCallerSentiment` | Live Caller Sentiment (⚠️ FEATURE-GATED) | `action` | `failure` |
 | `upload-audio` | Upload Audio | `action` | `error` |
 | `cryptographic-hash` | Cryptographic Hash | `action` | `error` |
 | `generate-otp` | Generate OTP | `action` | `out`, `error` |
 | `verify-otp` | Verify OTP | `action` | `error`, `failure`, `resend` |
-| `flow-test-activity` | Test Activity Flow | `action` | `failure` |
+| `ReceiveMessage` | Receive Message | `action` | `timeout`, `error` |
+| `SendCustomMessage` | Send Custom Message | `action` | `error` |
+| `flow-test-activity` | Test Activity Flow (⚠️ FEATURE-GATED) | `action` | `failure` |
 
 ### Logic Activities
 
@@ -1254,9 +1263,9 @@ Construct the FlowIR JSON object with all nodes, edges, variables, and event flo
 ### Step 2: Dry-Run Validate
 
 ```
-POST /v2/{orgId}/project/{projectId}/flows:validate
+POST /{orgId}/project/{projectId}/v2/flows:validate
 Content-Type: application/json
-Body: { FlowIR object }
+Body: { FlowV2 object }
 ```
 
 Response:
@@ -1274,17 +1283,17 @@ Fix all ERRORs. RECOMMENDATIONs (FC1004 isolated activities, FC1007 missing desc
 ### Step 3: Create/Import
 
 ```
-POST /v2/{orgId}/project/{projectId}/flows:import
+POST /{orgId}/project/{projectId}/v2/flows:import?overwrite=false
 Content-Type: application/json
-Body: { FlowIR object }
+Body: { FlowV2 object }
 ```
 
-Returns the created flow metadata including `id`, `status: "Draft"`, `createdBy`, `createdDate`.
+Returns `{"flow": {...}}` with the created flow metadata including `id`, `status: "Draft"`, `createdBy`, `createdDate`.
 
 ### Step 4: Verify
 
 ```
-GET /v2/{orgId}/project/{projectId}/flows/{flowId}/draft
+GET /{orgId}/project/{projectId}/v2/flows/{flowId}
 ```
 
 Confirm the flow was created with all nodes, edges, and resolved properties.
@@ -1448,14 +1457,20 @@ Some activities have different property names in the activity definition API vs.
 - `queue-contact`: The activity definition and `get_choices` API use `destination` as the input name, but the validator requires `queueId` as the node property. Using `destination` without `queueId` always fails with FC1015 "Required field 'Queue' is not configured". Use `queueId` for authoring; use `get_choices` with `input_name=destination` to resolve available queues.
 - `queue-contact`: Including `queueRadioGroup` activates "UI mode" validation that requires `destination` + all dual-format fields IN ADDITION TO `queueId`. Omit `queueRadioGroup` entirely to let `queueId` work as a complete shorthand.
 - `percent-allocation`: The activity definition API reports `allocations` as type `string[]` with component `PercentAllocation` and a default of `["{\"percent\":100,\"desc\":\"Allocation Default\"}"]` (an array of stringified JSON objects). The import validator rejects this format — it fails with "Percent allocation values must sum to 100 (current sum: 0.0)". The validator only accepts actual object arrays: `[{"percent":60,"desc":"PathA"},{"percent":40,"desc":"PathB"}]`. Use `object[]` semantics despite the API declaring `string[]`.
-- `set-announcement`: The activity definition API returns TWO inputs named `attributeTag` — feature-flag variants distinguished by `flagName=wxcc_record_agent_personal_greeting`. When `flagValue=off,control`: "Attribute tag" (not required). When `flagValue=on`: "Greeting Purpose" (required, defaultValue="Default"). The `wxcc-flow describe` command now shows both variants. When the flag is `on` and `toggleAgentGreeting` is `true`, omitting `attributeTag` fails validation because the "Greeting Purpose" variant is required.
+- `set-announcement`: Older definition layers returned TWO inputs named `attributeTag` — feature-flag variants distinguished by `flagName=wxcc_record_agent_personal_greeting` ("Attribute tag", not required, when `flagValue=off,control`; "Greeting Purpose", required, defaultValue="Default", when `flagValue=on`). The live prod registry (2026-07-11) resolves the flag server-side and returns ONE `attributeTag` (required, defaultValue="Default", shown when `toggleAgentGreeting == true`). When `toggleAgentGreeting` is `true`, omitting `attributeTag` fails validation.
 
-### Cascading Choices (CLI Limitation)
+### Cascading Choices
 
-Some activity fields have cascading dependencies — the available choices depend on a parent field's value. The `wxcc-flow choices` CLI does not support parent parameters. Use the REST API directly:
+Some activity fields have cascading dependencies — the available choices depend on a parent field's value. Pass the parent via the CLI (verified live 2026-07-11):
 
 ```
-GET /v2/{org}/project/{proj}/activities/{name}/inputs/{input}/choices?parentInputName={parent}&parentValue={value}
+wxcc-flow choices {activity} {input} --parent-input {parent} --parent-value {value}
+```
+
+REST equivalent:
+
+```
+GET /{org}/project/{proj}/v2/activities/{name}/inputs/{input}/choices?parentInputName={parent}&parentValue={value}
 ```
 
 Known cascading fields:
@@ -1463,7 +1478,7 @@ Known cascading fields:
 
 ## 12. Property Input Type Summary
 
-The activity definition API uses different component types for input fields. Each type has a distinct FlowIR authoring pattern. Use `wxcc-flow describe <activity>` to see which component each field uses.
+The activity definition API uses different component types for input fields. Each type has a distinct FlowIR authoring pattern. The live prod registry does not name components directly — identify them from `wxcc-flow describe <activity>` (field type, allowed values, choices endpoint) and from the `/choices` 400 message, which names the component when a field doesn't support choices (e.g., "is a 'Toggle'").
 
 ### Component Type → FlowIR Pattern
 
@@ -1486,7 +1501,7 @@ The activity definition API uses different component types for input fields. Eac
 
 ### Feature-Gated Activities
 
-These activities appear in the registry but return `ACTIVITY_NOT_FOUND` on create. Validation passes with a 500-level warning.
+These activities returned `ACTIVITY_NOT_FOUND` on create when they were still listed. As of 2026-07-11 they no longer appear in the live prod registry at all.
 
 | Activity | Status |
 |----------|--------|

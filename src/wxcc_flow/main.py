@@ -129,7 +129,7 @@ FLOW_COLUMNS = [
     ("Name", "name"),
     ("Status", "status"),
     ("Type", "flowType"),
-    ("Updated", "lastUpdated.date"),
+    ("Updated", "lastModifiedDate"),
 ]
 
 
@@ -140,13 +140,30 @@ def list_flows(
 ):
     """List all flows."""
     c = _client(debug)
-    data = c.get(c.v1_flows())
-    flows = data if isinstance(data, list) else data.get("flows", data.get("items", [data]))
+    flows = _get_all_flows(c)
 
     if output == "json":
         print_json(flows)
     else:
-        print_table(flows, FLOW_COLUMNS)
+        print_table(flows, FLOW_COLUMNS, limit=0)
+
+
+def _get_all_flows(c: FlowClient, extra_params: Optional[dict] = None) -> list:
+    """Page through GET /flows (server default size is 10 — silently
+    truncates without explicit paging)."""
+    flows = []
+    page = 0
+    while True:
+        params = {"page": page, "size": 100}
+        if extra_params:
+            params.update(extra_params)
+        data = c.get(c.v1_flows(), params=params)
+        batch = data if isinstance(data, list) else data.get(
+            "flows", data.get("items", data.get("data", [data])))
+        flows.extend(batch)
+        if len(batch) < 100:
+            return flows
+        page += 1
 
 
 @app.command()
@@ -167,40 +184,53 @@ def search(
     output: str = typer.Option("table", "-o", "--output"),
     debug: bool = typer.Option(False, "--debug"),
 ):
-    """Full-text search across flows."""
+    """Search flows by name (case-insensitive substring match).
+
+    Uses GET /flows?partialNameSearch= — the flows:search endpoint only
+    matches the exact, case-sensitive full name.
+    """
     c = _client(debug)
-    data = c.get(f"{c.v1_flows()}:search", params={"query": query})
-    flows = data if isinstance(data, list) else data.get("data", data.get("flows", data.get("items", [])))
+    flows = _get_all_flows(c, {"partialNameSearch": query})
     if output == "json":
         print_json(flows)
     else:
-        print_table(flows, FLOW_COLUMNS)
+        print_table(flows, FLOW_COLUMNS, limit=0)
 
 
 @app.command()
 def create(
-    file: str = typer.Argument(..., help="Path to FlowIR JSON file"),
+    file: str = typer.Argument(..., help="Path to flow (FlowV2) JSON file"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite if a flow with the same name exists"),
     debug: bool = typer.Option(False, "--debug"),
 ):
-    """Import/create a flow from a FlowIR JSON file."""
+    """Import/create a flow from a FlowV2 JSON file."""
     c = _client(debug)
     flowir = _read_flowir(file)
-    data = c.post(f"{c.v2_flows()}:import", json_body=flowir)
-    typer.echo(f"Created flow: {data.get('id', data.get('name', 'unknown'))}")
+    data = c.post(f"{c.v2_flows()}:import", json_body=flowir,
+                  params={"overwrite": str(overwrite).lower()})
+    flow = data.get("flow", data) if isinstance(data, dict) else data
+    typer.echo(f"Created flow: {flow.get('name', 'unknown')}  id={flow.get('id', 'unknown')}")
     print_json(data)
 
 
 @app.command("save-draft")
 def save_draft(
     flow_id: str = typer.Argument(..., help="Flow ID"),
-    file: str = typer.Argument(..., help="Path to FlowIR JSON file"),
+    file: str = typer.Argument(..., help="Path to flow (FlowV2) JSON file"),
+    expected_version: int = typer.Option(None, "--expected-version",
+        help="Optimistic-lock version; auto-resolved from the current flow if omitted"),
     debug: bool = typer.Option(False, "--debug"),
 ):
-    """Save a FlowIR file as draft for an existing flow."""
+    """Save a FlowV2 file as the draft of an existing flow."""
     c = _client(debug)
     flowir = _read_flowir(file)
-    data = c.post(f"{c.v2_flow(flow_id)}/draft", json_body=flowir)
-    typer.echo(f"Draft saved for flow {flow_id}")
+    if expected_version is None:
+        current = c.get(c.v2_flow(flow_id))
+        cur = current.get("flow", current) if isinstance(current, dict) else current
+        expected_version = cur.get("version", 0) or 0
+    data = c.post(c.v2_flow(flow_id), json_body=flowir,
+                  params={"expectedVersion": expected_version})
+    typer.echo(f"Draft saved for flow {flow_id} (expectedVersion={expected_version})")
     if data:
         print_json(data)
 
@@ -211,9 +241,9 @@ def export(
     out: str = typer.Option(None, "-o", "--out", help="Output file path (default: stdout)"),
     debug: bool = typer.Option(False, "--debug"),
 ):
-    """Export a flow as FlowIR JSON (v2 format)."""
+    """Export a flow as FlowV2 JSON (reads the current draft)."""
     c = _client(debug)
-    data = c.get(f"{c.v2_flow(flow_id)}:export")
+    data = c.get(c.v2_flow(flow_id))
     if out:
         _write_json(data, out)
     else:
@@ -226,9 +256,9 @@ def draft(
     out: str = typer.Option(None, "-o", "--out", help="Output file path"),
     debug: bool = typer.Option(False, "--debug"),
 ):
-    """Get the current draft of a flow as FlowIR."""
+    """Get the current draft of a flow as FlowV2 JSON."""
     c = _client(debug)
-    data = c.get(f"{c.v2_flow(flow_id)}/draft")
+    data = c.get(c.v2_flow(flow_id))
     if out:
         _write_json(data, out)
     else:
@@ -237,15 +267,15 @@ def draft(
 
 @app.command()
 def validate(
-    file: str = typer.Argument(None, help="Path to FlowIR JSON file"),
+    file: str = typer.Argument(None, help="Path to flow (FlowV2) JSON file"),
     flow_id: str = typer.Option(None, "--id", help="Validate a persisted flow by ID"),
     debug: bool = typer.Option(False, "--debug"),
 ):
-    """Dry-run validate a FlowIR file or persisted flow."""
+    """Validate a FlowV2 file (dry-run) or a persisted flow (--id)."""
     c = _client(debug)
     if flow_id:
-        data = c.get(f"{c.v2_flow(flow_id)}/draft")
-        result = c.post(f"{c.v2_flows()}:validate", json_body=data)
+        # Persisted flow: dedicated read-only validate endpoint.
+        result = c.get(f"{c.v2_flow(flow_id)}:validate")
     elif file:
         flowir = _read_flowir(file)
         result = c.post(f"{c.v2_flows()}:validate", json_body=flowir)
@@ -253,19 +283,19 @@ def validate(
         typer.echo("Error: Provide a FILE path or --id FLOW_ID.", err=True)
         raise typer.Exit(1)
 
+    # Dry-run returns {valid, errors, warnings}; persisted returns {valid, results}.
     errors = result.get("errors", [])
     warnings = result.get("warnings", [])
-    if not errors and not warnings:
+    if result.get("valid") and not errors:
         typer.echo("Validation passed.")
-    else:
-        if errors:
-            typer.echo(f"Errors ({len(errors)}):")
-            for e in errors:
-                typer.echo(f"  - {e}")
-        if warnings:
-            typer.echo(f"Warnings ({len(warnings)}):")
-            for w in warnings:
-                typer.echo(f"  - {w}")
+    elif errors:
+        typer.echo(f"Errors ({len(errors)}):")
+        for e in errors:
+            typer.echo(f"  - {e}")
+    if warnings:
+        typer.echo(f"Warnings ({len(warnings)}):")
+        for w in warnings:
+            typer.echo(f"  - {w}")
     print_json(result)
 
 
@@ -337,7 +367,8 @@ def versions(
     c = _client(debug)
     data = c.get(f"{c.v1_flow(flow_id)}/versions")
     vlist = data if isinstance(data, list) else data.get("versions", data.get("items", []))
-    cols = [("Version ID", "id"), ("Label", "label"), ("Published", "publishedDate")]
+    cols = [("Version ID", "id"), ("Version", "version"),
+            ("Created", "createdDate"), ("Created By", "createdBy")]
     if output == "json":
         print_json(vlist)
     else:
@@ -347,13 +378,38 @@ def versions(
 def _find_activity_safe(client: FlowClient, name: str):
     """Find an activity by name, returning None if not found."""
     data = client.get(client.v2_activities())
-    if isinstance(data, dict):
+    if isinstance(data, list):
+        for act in data:
+            if isinstance(act, dict) and act.get("activityName") == name:
+                return act
+    elif isinstance(data, dict):
         for _cat, activity_list in data.items():
             if isinstance(activity_list, list):
                 for act in activity_list:
-                    if act.get("name") == name:
+                    if act.get("activityName") == name or act.get("name") == name:
                         return act
     return None
+
+
+def _iter_inputs(act: dict, deep: bool = False):
+    """Yield input dicts from either definition shape.
+
+    Prod returns a flat `inputs` list (with nested `children`); legacy
+    deployments returned `inputGroups`. With deep=True, children are
+    yielded after their parent so callers see every field.
+    """
+    if act.get("inputGroups"):
+        for ig in act["inputGroups"]:
+            if ig.get("name") == "Decryption settings":
+                continue
+            yield from ig.get("inputs", [])
+        return
+    stack = list(act.get("inputs") or [])
+    while stack:
+        inp = stack.pop(0)
+        yield inp
+        if deep:
+            stack = list(inp.get("children") or []) + stack
 
 
 # ── Activity Registry ────────────────────────────────────────────────
@@ -376,7 +432,8 @@ def activities(
                     items.append(act)
     elif isinstance(data, list):
         items = data
-    cols = [("ID", "id"), ("Display Name", "displayName"), ("Name", "name"), ("Category", "category")]
+    cols = [("Name", "activityName"), ("Display Name", "displayName"),
+            ("Category", "category"), ("Type", "activityType")]
     if output == "json":
         print_json(items)
     else:
@@ -406,7 +463,7 @@ _describe_console = Console()
 
 def _print_activity_summary(act: dict) -> None:
     """Print a formatted summary of an activity definition."""
-    name = act.get("name", "")
+    name = act.get("activityName", act.get("name", ""))
     display = act.get("displayName", "")
     desc = act.get("description", "")
     category = act.get("category", "")
@@ -429,6 +486,52 @@ def _print_activity_summary(act: dict) -> None:
 
 
 def _print_input_fields(act: dict) -> None:
+    """Print input fields (prod flat `inputs` shape, or legacy inputGroups)."""
+    if act.get("inputGroups"):
+        _print_input_fields_legacy(act)
+        return
+
+    rows = []
+
+    def _add(inputs, prefix=""):
+        for inp in inputs:
+            allowed = inp.get("allowedValues")
+            if allowed:
+                choices = ", ".join(str(v) for v in allowed[:8])
+                if len(allowed) > 8:
+                    choices += f", … ({len(allowed)} total)"
+            elif inp.get("choicesEndpoint"):
+                choices = "choices endpoint"
+            else:
+                choices = ""
+            default = inp.get("defaultValue")
+            rows.append({
+                "name": f"{prefix}{inp.get('name', '')}",
+                "type": inp.get("type", ""),
+                "required": "Yes" if inp.get("required") else "No",
+                "default": "--" if default in (None, "") else str(default),
+                "condition": inp.get("showOnCondition") or "",
+                "choices": choices,
+            })
+            _add(inp.get("children") or [],
+                 f"{prefix}{inp.get('name', '')}.")
+
+    _add(act.get("inputs") or [])
+    if not rows:
+        return
+    table = Table(title="Input Fields", show_header=True,
+                  header_style="bold")
+    for col in ["Field", "Type", "Required", "Default", "Condition",
+                "Choices"]:
+        table.add_column(col)
+    for r in rows:
+        table.add_row(r["name"], r["type"], r["required"], r["default"],
+                      r["condition"], r["choices"])
+    _describe_console.print(table)
+    _describe_console.print()
+
+
+def _print_input_fields_legacy(act: dict) -> None:
     """Print input fields from inputGroups, deduplicated by composite key.
 
     Fields with the same name but different flagName/flagValue are
@@ -527,10 +630,18 @@ def _print_output_variables(act: dict) -> None:
 
 
 def _print_output_ports(act: dict) -> None:
-    """Print output ports from errorPathLinks and outputConditions."""
+    """Print output ports (prod flat `outputPorts`, or legacy shapes)."""
     ports = {}
-    # errorPathLinks
-    for link in act.get("shapeProperties", {}).get("errorPathLinks", []):
+    # Prod shape: outputPorts = [{condition, label, isErrorPath}]
+    for p in act.get("outputPorts") or []:
+        pid = p.get("condition", "")
+        ports[pid] = {
+            "condition": pid,
+            "label": p.get("label", ""),
+            "is_error": "Yes" if p.get("isErrorPath") else "No",
+        }
+    # Legacy shape: shapeProperties.errorPathLinks + outputConditions
+    for link in (act.get("shapeProperties") or {}).get("errorPathLinks", []):
         pid = link.get("id", "")
         ports[pid] = {
             "condition": pid,
@@ -565,8 +676,8 @@ def schema(
 ):
     """Build a FlowIR node template from the activity definition.
 
-    Uses REAL property names from inputGroups (not the broken
-    /schema endpoint which returns wrong propertyHints names).
+    Uses REAL property names from the definition's input fields (there
+    is no /schema endpoint on prod; propertyHints names were wrong).
     """
     c = _client(debug)
     act = c.get_activity_definition(activity)
@@ -575,16 +686,19 @@ def schema(
         print_json(act)
         return
 
-    # Determine activityType from group
     raw_group = act.get("group", "action")
     group = raw_group.get("name", str(raw_group)) if isinstance(raw_group, dict) else str(raw_group)
-    end_activities = {"disconnect-contact", "end-subflow", "end"}
-    if activity in end_activities:
-        activity_type = "end"
-    elif activity == "start":
-        activity_type = "start"
-    else:
-        activity_type = "action"
+    # Prod definitions carry activityType directly; guess from the name
+    # only when it's absent (legacy shape).
+    activity_type = act.get("activityType")
+    if not activity_type:
+        end_activities = {"disconnect-contact", "end-subflow", "end"}
+        if activity in end_activities:
+            activity_type = "end"
+        elif activity == "start":
+            activity_type = "start"
+        else:
+            activity_type = "action"
 
     node_id = f"node-{activity.replace('-', '_')}"
     display_name = act.get("displayName", activity)
@@ -603,38 +717,45 @@ def schema(
     conditional_props = {}
     seen_fields = set()
     warnings = []
-    for ig in act.get("inputGroups", []):
-        gname = ig.get("name", "")
-        if gname == "Decryption settings":
+    for inp in _iter_inputs(act):
+        if not inp.get("required"):
             continue
-        for inp in ig.get("inputs", []):
-            if not inp.get("required"):
-                continue
-            field_name = inp.get("name", "")
-            if field_name in seen_fields:
-                continue
-            seen_fields.add(field_name)
-            if field_name in overrides:
-                import_name, note = overrides[field_name]
-                warnings.append(f"  ⚠ '{field_name}' → '{import_name}': {note}")
-                field_name = import_name
-            default = inp.get("defaultValue")
-            if default is not None:
-                if isinstance(default, str) and default.startswith('"') and default.endswith('"'):
-                    default = default[1:-1]
-                val = default
-            else:
-                val = f"<{inp.get('type', 'string')}>"
-            show_cond = inp.get("showOnCondition")
-            if show_cond:
-                cond_str = f"{show_cond.get('name', '')} == {show_cond.get('value', '')}" if isinstance(show_cond, dict) else str(show_cond)
-                conditional_props[field_name] = (val, cond_str)
-            else:
-                properties[field_name] = val
+        field_name = inp.get("name", "")
+        if field_name in seen_fields:
+            continue
+        seen_fields.add(field_name)
+        if field_name in overrides:
+            import_name, note = overrides[field_name]
+            warnings.append(f"  ⚠ '{field_name}' → '{import_name}': {note}")
+            field_name = import_name
+        default = inp.get("defaultValue")
+        children = inp.get("children") or []
+        if default not in (None, "", [], {}):
+            if isinstance(default, str) and default.startswith('"') and default.endswith('"'):
+                default = default[1:-1]
+            val = default
+        elif children:
+            # object[] input: show one example element with its child fields
+            val = [{ch.get("name", ""): f"<{ch.get('type', 'string')}>"
+                    for ch in children}]
+        else:
+            val = f"<{inp.get('type', 'string')}>"
+        show_cond = inp.get("showOnCondition")
+        if show_cond:
+            cond_str = f"{show_cond.get('name', '')} == {show_cond.get('value', '')}" if isinstance(show_cond, dict) else str(show_cond)
+            conditional_props[field_name] = (val, cond_str)
+        else:
+            properties[field_name] = val
 
-    # Build output ports from errorPathLinks
+    # Build output ports (prod flat outputPorts, or legacy errorPathLinks)
     error_ports = []
-    for link in act.get("shapeProperties", {}).get("errorPathLinks", []):
+    for p in act.get("outputPorts") or []:
+        error_ports.append({
+            "id": p.get("condition", ""),
+            "displayName": p.get("label", "")
+                or ("error path" if p.get("isErrorPath") else ""),
+        })
+    for link in (act.get("shapeProperties") or {}).get("errorPathLinks", []):
         error_ports.append({
             "id": link.get("id", ""),
             "displayName": link.get("displayName", ""),
@@ -667,7 +788,7 @@ def schema(
 
     if error_ports:
         console.print()
-        table = Table(title="Output Ports (errorPathLinks)",
+        table = Table(title="Output Ports",
                       show_header=True, header_style="bold")
         table.add_column("Port ID")
         table.add_column("Display Name")
@@ -681,63 +802,46 @@ def choices(
     activity: str = typer.Argument(..., help="Activity name"),
     input_name: str = typer.Argument(..., help="Input/property name"),
     search_query: str = typer.Option(None, "--search", help="Filter choices"),
+    parent_input: str = typer.Option(None, "--parent-input",
+        help="Parent input name for cascading choices (e.g. channelType)"),
+    parent_value: str = typer.Option(None, "--parent-value",
+        help="Selected parent value for cascading choices (e.g. TELEPHONY)"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Get dropdown values for an activity input."""
     c = _client(debug)
     params = {}
     if search_query:
-        params["query"] = search_query
+        params["search"] = search_query
+    if parent_input:
+        params["parentInputName"] = parent_input
+    if parent_value:
+        params["parentValue"] = parent_value
     path = f"{c.v2_activities()}/{activity}/inputs/{input_name}/choices"
     try:
         data = c.get(path, params=params)
         print_json(data)
     except FlowStoreError as e:
-        if e.status_code != 400:
-            typer.echo(f"Error: HTTP {e.status_code}: {e.body[:200]}", err=True)
-            raise typer.Exit(1)
-        # Check if this is a RadioGroup or RadioGroupWithValue input
-        body = e.body
-        is_radio = ("RadioGroup" in body
-                     or "RadioGroupWithValue" in body)
-        if not is_radio:
-            typer.echo(f"Error: HTTP 400: {body[:200]}", err=True)
-            raise typer.Exit(1)
-
-        # Fetch the full activity definition and find the input
+        # Prod 400s are descriptive (unsupported input type, unknown
+        # input, missing parentValue for cascading inputs). Prefer
+        # static allowedValues from the definition when present;
+        # otherwise surface the server's message.
         act = c.get_activity_definition(activity)
         matched_input = None
-        for ig in act.get("inputGroups", []):
-            for inp in ig.get("inputs", []):
-                if inp.get("name") == input_name:
-                    matched_input = inp
-                    break
-            if matched_input:
+        for inp in _iter_inputs(act, deep=True):
+            if inp.get("name") == input_name:
+                matched_input = inp
                 break
 
-        if not matched_input:
-            typer.echo(
-                f"Error: Input '{input_name}' not found in "
-                f"'{activity}' definition.", err=True)
-            raise typer.Exit(1)
-
-        component = matched_input.get("component", "")
-        console = Console()
-        console.print(
-            f"[bold]{input_name}[/bold] is a [yellow]{component}"
-            f"[/yellow] — the /choices endpoint does not support "
-            f"this type.")
-        console.print()
-
-        # Show static options from the input definition
-        options = (matched_input.get("choices")
-                   or matched_input.get("options")
-                   or matched_input.get("values")
-                   or [])
+        options = (matched_input or {}).get("allowedValues") \
+            or (matched_input or {}).get("choices") \
+            or (matched_input or {}).get("options") \
+            or []
         if options:
+            console = Console()
             table = Table(title=f"Static options for {input_name}",
                           show_header=True, header_style="bold")
-            if options and isinstance(options[0], dict):
+            if isinstance(options[0], dict):
                 table.add_column("Value")
                 table.add_column("Label")
                 for opt in options:
@@ -750,20 +854,16 @@ def choices(
                 for opt in options:
                     table.add_row(str(opt))
             console.print(table)
-        else:
-            # For RadioGroupWithValue, explain the pattern
-            if "WithValue" in component:
-                console.print(
-                    "RadioGroupWithValue inputs accept a typed "
-                    "value plus a radioName suffix field.\n"
-                    "Check the activity definition "
-                    "('wxcc-flow describe " + activity + "') "
-                    "for the full input structure.")
-            else:
-                console.print(
-                    "No static options found in the definition. "
-                    "Run 'wxcc-flow describe " + activity + "' "
-                    "to inspect the input.")
+            return
+
+        try:
+            errors = json.loads(e.body).get("errors") or []
+        except (ValueError, AttributeError):
+            errors = []
+        message = (" ".join(str(x) for x in errors)
+                   if errors else e.body[:400])
+        typer.echo(f"Error: HTTP {e.status_code}: {message}", err=True)
+        raise typer.Exit(1)
 
 
 # ── Org / Config ─────────────────────────────────────────────────────
@@ -862,10 +962,12 @@ def events(
                 if ev.get("eventSpecificationName") not in seen:
                     event_specs.append(ev)
 
-    # Fallback: call the eventSpecifications endpoint
+    # Fallback: call the eventSpecifications endpoint. Not routed on
+    # produs1 (absent from the live /v3/api-docs) — kept for other
+    # deployments; get_safe swallows the 404/500.
     if not event_specs:
-        path = (f"/v2/{c.org_id}/project/{c.project_id}"
-                f"/eventSpecifications")
+        path = (f"/{c.org_id}/project/{c.project_id}"
+                f"/v2/eventSpecifications")
         data, err = c.get_safe(path)
         if data is not None:
             if isinstance(data, list):
@@ -877,8 +979,10 @@ def events(
 
     if not event_specs:
         typer.echo(
-            "No event specifications found. The start activity "
-            "may not expose events in this org's activity registry.",
+            "No event specifications found: the prod Flow Store API "
+            "exposes no event-spec catalog endpoint. Get event names "
+            "from an exported flow's eventFlows ('wxcc-flow export') "
+            "or the flow-designer-flowir.md reference.",
             err=True)
         raise typer.Exit(1)
 
@@ -901,7 +1005,10 @@ def test_expr(
 ):
     """Test a Pebble/flow expression."""
     c = _client(debug)
-    data = c.post("/expressionTest", json_body={"expression": expression})
+    # Body field is `expr` (undocumented — ExpressionTestRequest is an
+    # empty schema in /v3/api-docs; other names silently fail with a
+    # "compiledTemplate is null" error).
+    data = c.post("/expressionTest", json_body={"expr": expression})
     print_json(data)
 
 
@@ -942,8 +1049,8 @@ def template(
             "edges": [
                 {
                     "id": "edge-1",
-                    "from": "node-start",
-                    "to": "node-end",
+                    "from": "StartFlow",
+                    "to": "DisconnectContact",
                     "condition": "out",
                     "properties": {},
                 }
