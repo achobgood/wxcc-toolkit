@@ -29,6 +29,17 @@ The target user has ZERO prior experience with WxCC, Webex Connect, AI Agent Stu
 
 If you're about to write "configure the [X]" without saying exactly where and how, stop and look it up in `docs/`.
 
+### Plain-English Communication Rule
+
+The target user has ZERO platform experience. When explaining findings, trade-offs, or decisions — or asking the user to choose between options — do NOT lead with jargon, acronyms, or internal feature-names. Instead:
+- Lead with **"what we're actually deciding"** in one plain sentence.
+- Replace every technical term with a **concrete before/after of what the user would type or see** (e.g. "Today you type X and see Y; the other way you'd type/see Z").
+- Answer their real questions directly: **what should we do, why, is it easy to maintain, what risks breaking.**
+- **End with a clear recommendation**, not a neutral menu of options.
+- If a technical term must appear, define it inline the first time.
+
+This applies to chat answers AND the option text in any question you ask the user.
+
 ### Skill Invocation Rule
 
 When the agent file or a skill says "YOU MUST call Skill(X)" or "Step 1: Load references — read these docs," that is not a suggestion. The reference docs contain platform-specific conventions that CANNOT be guessed correctly from training data — this applies to Connect node wiring, Flow Designer activities, AI Agent Studio configuration, Control Hub setup, and all outbound/inbound flow patterns alike.
