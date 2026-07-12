@@ -13,6 +13,7 @@ def get(
     id_param: str = typer.Argument(..., help="id"),
     ignore_ff: bool = typer.Option(None, "--ignore-ff/--no-ignore-ff", help="Whether to return the template even if feature flag is off"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
+    out: str = typer.Option(None, "--out", help="Write response JSON to FILE"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Retrieve flow/subflow template by template ID.. [operationId: findById]"""
@@ -26,6 +27,11 @@ def get(
     except FlowStoreError as e:
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
+    if out:
+        with open(out, "w") as _of:
+            import json as _json; _json.dump(data, _of, indent=2, default=str)
+        typer.echo(f"Wrote {out}")
+        return
     print_json(data)
 
 

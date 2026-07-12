@@ -62,7 +62,7 @@ blocked_endpoints:
 
 # ── warn → real command + stderr banner before the call. ────────────────────
 warn_endpoints:
-  findAllLatestFlowVersions: "500s org-wide when never-published flows exist; fall back to 'api versions all'"
+  findAllLatestFlowVersions: "500s org-wide when never-published flows exist; fall back to paged 'wxcc-flow all-versions'"
   dryRunValidate: "always validates as FLOW (no flowType param); a valid SUBFLOW fails with ACTIVITY_NOT_FOUND on end-subflow"
   validateFlowVersionById: "always validates as FLOW (no flowType param); a valid SUBFLOW fails with ACTIVITY_NOT_FOUND on end-subflow"
   patchDraft: "500s on consume-template-created drafts; patch FlowIR-authored flows only"
@@ -73,6 +73,125 @@ warn_endpoints:
 request_overrides:
   importFlowVersion_1:
     multipart: true
+
+# ── per-op flag renames (Phase C): keep the DOCUMENTED flags (CLAUDE.md ships
+#    `choices ... --parent-input X --parent-value Y` and `traces ... --page N`);
+#    the spec wire names would derive --parent-input-name / --current-page. ────
+param_cli_names:
+  getChoicesForInput: {parentInputName: parent-input}
+  getTraces: {currentPage: page}
+
+# ── file input (Phase C): the command's positional FILE (or '-' for stdin)
+#    becomes the JSON request body. ──────────────────────────────────────────
+body_from_file:
+  importFlowVersion: true          # create FILE
+  saveDraft: true                  # save-draft FLOW FILE
+  patchDraft: true                 # patch FLOW FILE
+  updateFlowPreferences: true      # prefs-set FLOW FILE
+  createFlowPreference: true       # prefs-add FLOW FILE
+  consumeFlowFromJson: true        # consume FILE (+ body_transform below)
+  dryRunValidate: true             # validate FILE (design § 14 split)
+
+# ── consume: the contract wants the request body to be a JSON *string*
+#    containing the flow JSON (double-encoded) — verified live Phase 3. ───────
+body_transform:
+  consumeFlowFromJson: json-string
+
+# ── file output (Phase C): adds `--out FILE` (write response JSON to a file).
+#    NOTE the hand commands used `-o` for the file; generated keeps -o/--output
+#    for FORMAT and uses --out for the file (goldens README reconciliation). ──
+output_file_option:
+  getDraft: true                   # draft
+  exportFlowVersion: true          # export (v2)
+  exportFlowVersion_1: true        # export-ui (v1, incl. UI diagram data)
+  findById: true                   # template-get
+  # the old `version FLOW [ref]` multiplexer had --out; its three split
+  # replacements keep it (audit F2)
+  getLatestFlowVersion: true       # version-latest
+  getLatestFlowDraftVersion: true  # version-draft
+  getFlowVersionById: true         # version-by-id
+
+# ── auto_resolve_params (Phase C): when the flag is omitted, pre-fetch the
+#    op's own path (GET = the current draft) and read `flow.version` into
+#    expectedVersion — optimistic-lock parity with the hand commands. ─────────
+auto_resolve_params:
+  saveDraft:
+    expectedVersion: {unwrap: flow, field: version, forward_params: [flowType]}
+  patchDraft:
+    expectedVersion: {unwrap: flow, field: version, forward_params: [flowType]}
+
+# ── param_defaults (Phase C): seed a query param where the DOCUMENTED CLI
+#    default differs from the API default. setdefault after the query build —
+#    an explicit flag always wins. ─────────────────────────────────────────────
+param_defaults:
+  # export: historical CLI behavior exports the DRAFT; the API default is
+  # 'latest' (most recent published). CLAUDE.md documents the draft default.
+  exportFlowVersion: {version: draft}
+  # publish: hand command skips publish-time validation by default (the CLI
+  # workflow validates explicitly beforehand; publish-time validation can
+  # false-positive, e.g. FC1015 on hand-off flows). API default validates.
+  publishFlowVersion: {skipValidation: "true"}
+
+# ── publish --validate: inverted bool flag over the skipValidation wire param
+#    (--validate → skipValidation=false). ─────────────────────────────────────
+param_flag_inversions:
+  publishFlowVersion:
+    skipValidation: {cli_name: validate, invert: true}
+  # check --with-drafts: bool flag whose WIRE values are yes/no — the server
+  # accepts "true" without a 400 but silently treats it as the default "no"
+  # (audit F1; hand code sent "yes").
+  findFlows_1:
+    withDraftVersions: {cli_name: with-drafts, true_value: "yes", false_value: "no"}
+
+# ── unique-name: exit 1 when the name is taken (isUnique=false; key verified
+#    live 2026-07-12 — the server 200s with {"isUnique": bool}). ──────────────
+exit_code_from:
+  checkFlowNameUniqueness: {json_key: isUnique, invert: true}
+
+# ── test-expr: ExpressionTestRequest is an EMPTY schema in the contract; the
+#    real body field is `expr` (verified via raw curl 2026-07-11). ────────────
+body_fields_override:
+  testExpression:
+    - {name: expr, type: str, desc: "Flow expression to test", required: true}
+
+# ── prefs-rm: the DELETE body is a JSON array of preference names — one
+#    positional list arg (kills the spec-junk --empty/--traversable-again). ───
+body_positional_list:
+  removeFlowPreferencesByPreferenceNames: {arg: names, help: "Preference names to remove"}
+
+confirm_message:
+  removeFlowPreferencesByPreferenceNames: "Remove preferences {', '.join(names)} from flow {flow_id}?"
+
+# ── extra_commands (Phase C): clone one op into additional commands. The clone
+#    inherits the base op's RESOLVED overrides; the `overrides` block here uses
+#    RESOLVED key names (warn/item_key/command_type/...) and a null/false value
+#    clears an inherited key. `top_level` promotes the clone to the root app. ──
+extra_commands:
+  findFlows:
+    - name: search
+      top_level: search
+      doc: "Search flows by name (case-insensitive substring match)"
+      overrides:
+        promote_to_argument: [partialNameSearch]
+  patchDraft:
+    - name: update
+      top_level: update
+      doc: "Rename / re-describe a flow (applies to the draft; publish to propagate)"
+      overrides:
+        body_from_file: false          # clear the base patch's FILE argument
+        warn: null                     # clear the consume-template-draft warn banner
+        require_some_body: true        # refuse an empty patch
+        body_fields_override:
+          - {name: name, type: str, desc: "New flow name"}
+          - {name: description, type: str, desc: "New flow description"}
+        success_echo: "Updated draft of flow {flow_id} (publish to propagate to the flow level)"
+
+# ── help_notes (Phase C) ──────────────────────────────────────────────────────
+help_notes:
+  getTracesDecrypt: "Returns DECRYPTED traces; --process-id is required (get it from the undecrypted traces or the interaction metadata)."
+  findFlows_1: "Provide at least one filter (--global-var, --ep-id, --skill-id, --business-hour, --search, --flow-id) — the server rejects unfiltered calls (400 'No search parameter provided')."
+  exportFlowVersion: "--version defaults to 'draft' (historical CLI behavior; 'latest' = most recent published, or pass a version ID)."
+  publishFlowVersion: "Publish-time validation is OFF by default (validate explicitly with 'wxcc-flow validate'); add --validate to validate at publish time."
 
 # ── global flag renames (applied to EVERY op; a per-op param_cli_names entry
 #    wins on a conflicting wire name). Preserves the documented `--type` flag
@@ -95,15 +214,19 @@ pagination:
 # ── item_key for non-paginated list commands rendered with a table. ─────────
 response_list_keys:
   findAllConnectors: connectors
+  getGlobalVariables: variables    # API envelope is {"variables": [...]} (found by Phase-C sweep)
 
 # ── table columns (also marks the command as a list). Columns use only field
 #    accessors verified live in Phase A (api sweep) or Phase 3 (hand commands). ─
 table_columns:
-  findFlows: [["ID", "id"], ["Name", "name"], ["Type", "flowType"], ["Status", "status"]]
+  # hand FLOW_COLUMNS parity (list/search/check share it)
+  findFlows: [["ID", "id"], ["Name", "name"], ["Status", "status"], ["Type", "flowType"], ["Updated", "lastModifiedDate"]]
+  findFlows_1: [["ID", "id"], ["Name", "name"], ["Status", "status"], ["Type", "flowType"], ["Updated", "lastModifiedDate"]]
+  getGlobalVariables: [["Name", "name"], ["Type", "type"], ["Value", "value"]]
   # Version ID (ObjectId) MUST lead — it is what `revert FLOW VERSION` / `version get`
   # consume; dropping it from the default table breaks the find-then-revert workflow.
   getPublishedFlowVersions: [["Version ID", "id"], ["Version", "version"], ["Tag", "tag"], ["Published", "publishedDate"], ["Created By", "createdBy"]]
-  getAllFlowVersions: [["Flow", "flowId"], ["Version", "version"], ["Tag", "tag"]]
+  getAllFlowVersions: [["Version ID", "id"], ["Name", "name"], ["Version", "version"], ["Type", "flowType"], ["Created", "createdDate"]]
   findAll_1: [["ID", "id"], ["Name", "name"], ["Type", "flowType"], ["Description", "description"]]
   findAll: [["ID", "id"], ["Name", "name"], ["Default", "default"], ["Created By", "createdBy"]]
   findAllConnectors: [["ID", "id"], ["Name", "name"], ["Type", "type"]]
@@ -118,6 +241,13 @@ success_echo:
   unlockFlow: "Unlocked flow {flow_id}"
   removeFlowById: "Deleted flow {flow_id}"
   revertFlowVersion: "Reverted flow {flow_id} to version {version_id}"
+  # Phase C — mutations whose hand commands printed a friendly confirmation
+  saveDraft: "Draft saved for flow {flow_id}"
+  patchDraft: "Patched draft of flow {flow_id}"
+  publishFlowVersion: "Published flow {flow_id}"
+  updateFlowPreferences: "Preferences updated for flow {flow_id}"
+  createFlowPreference: "Preferences added for flow {flow_id}"
+  removeFlowPreferencesByPreferenceNames: "Removed preferences from flow {flow_id}"
 
 # ── promote_to_argument (Phase-B polish): the verb's SUBJECT reads better as a
 #    positional argument than behind a required flag — `revert FLOW VERSION`,
@@ -127,6 +257,9 @@ promote_to_argument:
   copyFlow: ["sourceFlowId"]
   revertFlowVersion: ["versionId"]
   performFlowVariableAutoMapping: ["currentFlowId", "handOffFlowId"]
+  # Phase C — documented positional subjects
+  checkFlowNameUniqueness: ["flowName"]                  # unique-name NAME
+  consumeFlowFromTemplate: ["templateName", "flowName"]  # consume-template TEMPLATE NAME
 
 # ── expose_path_param (Phase-B polish): the connector-controller 404s on the
 #    system-provisioned project, so the auto-injected projectId must be
@@ -221,9 +354,8 @@ top_level_commands:
   getTagHistories: tag-history
   getUserPreferences: user-prefs
   getResourceCollectionsByUserProfile: resource-collections
-  # NOTE: `health` intentionally NOT promoted — the hand command bundles /health
-  # AND /build_info (2 calls); the generated single-op `util health` drops
-  # build-info. Deferred to Phase C (split health + build-info, or keep the bundle).
+  # (health: the hand command bundled /health + /build_info; Phase-C decision (a)
+  # split it into TWO promoted commands — `health` and `build-info` — see below.)
   getInteraction: interaction
   getAnalytics: analytics
   findProject: project
@@ -242,6 +374,51 @@ top_level_commands:
   # Connectors — with the --project-id override so they can reach a user project
   findAllConnectors: connector-list
   getConnector: connector
+  # ── Phase C wave 2 ─────────────────────────────────────────────────────────
+  # Simple reads
+  getGlobalVariables: global-vars
+  getActivityDefinitions: activities
+  findFlows_1: check
+  findFlows: list
+  # File I/O
+  getDraft: draft
+  exportFlowVersion: export
+  exportFlowVersion_1: export-ui
+  findById: template-get
+  # Body-from-file
+  importFlowVersion: create
+  saveDraft: save-draft
+  patchDraft: patch
+  updateFlowPreferences: prefs-set
+  createFlowPreference: prefs-add
+  # DELETE-with-body
+  removeFlowPreferencesByPreferenceNames: prefs-rm
+  # multipart
+  importFlowVersion_1: import-ui
+  # Single-feature transforms
+  consumeFlowFromJson: consume
+  consumeFlowFromTemplate: consume-template
+  publishFlowVersion: publish
+  checkFlowNameUniqueness: unique-name
+  testExpression: test-expr
+  # UX splits (dispatchers → per-op commands; docs updated in Phase D)
+  dryRunValidate: validate
+  validateFlowVersionById: validate-id
+  getLatestFlowVersion: version-latest
+  getLatestFlowDraftVersion: version-draft
+  getFlowVersionById: version-by-id
+  getTraces: traces
+  getTracesDecrypt: traces-decrypt
+  getAllFlowVersions: all-versions
+  findAllLatestFlowVersions: all-versions-latest
+  # UX behavior changes (accepted design § 14)
+  getCurrentUser: whoami
+  describeActivity: describe
+  getChoicesForInput: choices
+  # health decision (a): two clean commands — health AND build-info
+  health: health
+  buildInfo: build-info
+  # (search + update promote via their extra_commands top_level keys)
 
 # ── drift-gate excuse list: the 7 irreducible hand-written commands (design
 #    § 14) have no spec operation; the parity gate counts them as excused. ────

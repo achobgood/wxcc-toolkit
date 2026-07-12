@@ -2,7 +2,7 @@
   "openapi": "3.0.1",
   "info": {"title": "Mini Flow Store fixture", "version": "1.0"},
   "servers": [{"url": "http://example.test/flow-store"}],
-  "tags": [{"name": "Widgets"}, {"name": "admin-widget-controller"}],
+  "tags": [{"name": "Widgets"}, {"name": "admin-widget-controller"}, {"name": "WidgetTags"}],
   "paths": {
     "/{orgId}/project/{projectId}/widgets": {
       "get": {
@@ -52,7 +52,9 @@
         "parameters": [
           {"name": "orgId", "in": "path", "required": true, "schema": {"type": "string"}},
           {"name": "projectId", "in": "path", "required": true, "schema": {"type": "string"}},
-          {"name": "widgetId", "in": "path", "required": true, "schema": {"type": "string"}}
+          {"name": "widgetId", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "expectedVersion", "in": "query", "required": false, "schema": {"type": "integer"}, "description": "Optimistic-lock version"},
+          {"name": "flowType", "in": "query", "required": false, "schema": {"type": "string", "default": "FLOW"}}
         ],
         "requestBody": {"content": {"application/merge-patch+json": {"schema": {"type": "object"}}}},
         "responses": {"200": {"description": "ok"}}
@@ -96,6 +98,20 @@
           {"name": "orgId", "in": "path", "required": true, "schema": {"type": "string"}},
           {"name": "projectId", "in": "path", "required": true, "schema": {"type": "string"}}
         ],
+        "responses": {"200": {"description": "ok"}}
+      }
+    },
+    "/{orgId}/project/{projectId}/widgets/{widgetId}/tags": {
+      "delete": {
+        "tags": ["WidgetTags"],
+        "operationId": "removeWidgetTags",
+        "summary": "Remove widget tags",
+        "parameters": [
+          {"name": "orgId", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "projectId", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "widgetId", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "requestBody": {"content": {"application/json": {"schema": {"type": "array", "items": {"type": "string"}}}}},
         "responses": {"200": {"description": "ok"}}
       }
     },

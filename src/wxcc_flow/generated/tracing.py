@@ -36,7 +36,7 @@ def traces(
     flow_id: str = typer.Argument(..., help="flowId"),
     version_id: str = typer.Argument(..., help="versionId"),
     interaction_id: str = typer.Argument(..., help="interactionId"),
-    current_page: int = typer.Option(None, "--current-page", help="index of the current page for pagination"),
+    current_page: int = typer.Option(None, "--page", help="index of the current page for pagination"),
     page_size: int = typer.Option(None, "--page-size", help="determines the number of records in a page"),
     process_id: str = typer.Option(None, "--process-id", help="processId of the flow version"),
     doc_id: str = typer.Option(None, "--doc-id", help="document id of the flow trace"),
@@ -73,7 +73,7 @@ def traces_decrypt(
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
-    """Get traces by interaction ID of a Flow Version object. [operationId: getTracesDecrypt]"""
+    """Get traces by interaction ID of a Flow Version object. Returns DECRYPTED traces; --process-id is required (get it from the undecrypted traces or the interaction metadata). [operationId: getTracesDecrypt]"""
     c = FlowClient(debug=debug)
     params = {}
     if process_id is not None:

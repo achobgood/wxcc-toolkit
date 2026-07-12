@@ -10,6 +10,7 @@ app = typer.Typer(help="Flow Store util operations (generated).", no_args_is_hel
 
 @app.command("test-expr")
 def test_expr(
+    expr: str = typer.Option(None, "--expr", help="Flow expression to test"),
     json_body: str = typer.Option(None, "--json-body", help="Full JSON body (overrides flags)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
@@ -21,6 +22,12 @@ def test_expr(
         body = json.loads(json_body)
     else:
         body = {}
+        if expr is not None:
+            body["expr"] = expr
+    _missing = [k for k in ['expr'] if k not in body or body[k] is None]
+    if _missing:
+        typer.echo("Error: Missing required fields: " + ", ".join(_missing), err=True)
+        raise typer.Exit(1)
     _path = f"/expressionTest"
     try:
         data = c.post(_path, json_body=body, params=params)

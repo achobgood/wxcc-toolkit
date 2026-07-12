@@ -12,6 +12,10 @@ flags (3), enum help text (4), blocked/warn stubs (5), page-number pagination
 loops (6), manifest (8, in generate.py). Feature keys (design § 6):
 output_file_option, body_from_file, body_transform, exit_code_from,
 param_flag_inversions, body_fields_override, help_notes, param_cli_names.
+Phase-C keys: auto_resolve (pre-fetch a query param from the op's own path),
+param_defaults (seed params the server defaults differently), body_positional_list
+(array body from one positional list arg), confirm_message (delete confirm text),
+require_some_body (refuse an empty body).
 """
 from __future__ import annotations
 
@@ -152,6 +156,41 @@ def _promoted_query_lines(ep: Endpoint, op_ovr: dict) -> list:
     return lines
 
 
+def _param_default_lines(op_ovr: dict) -> list:
+    """param_defaults: seed a query param the server defaults differently from
+    the documented CLI behavior (e.g. export's --version must default to 'draft';
+    the spec default is 'latest'). setdefault AFTER the query build so an
+    explicit flag always wins."""
+    return [f'    params.setdefault("{wire}", {val!r})'
+            for wire, val in (op_ovr.get("param_defaults") or {}).items()]
+
+
+def _auto_resolve_lines(ep: Endpoint, op_ovr: dict) -> list:
+    """auto_resolve_params: when the named query param was not supplied, resolve
+    it by GETting the op's OWN path first (e.g. saveDraft/patchDraft pre-fetch
+    the draft and read `flow.version` into expectedVersion — optimistic-lock
+    parity with the hand-written commands). forward_params lists wire params
+    (already in `params`) to pass along on the pre-fetch."""
+    lines = []
+    for pname, rspec in (op_ovr.get("auto_resolve") or {}).items():
+        fwd = rspec.get("forward_params") or []
+        lines.append(f'    if "{pname}" not in params:')
+        lines.append(f"        _rp = {{k: params[k] for k in {fwd!r} if k in params}}")
+        lines.append("        try:")
+        lines.append(f'            _pre = c.get(f"{_url_expr(ep, op_ovr)}", params=_rp)')
+        lines += [
+            "        except FlowStoreError as e:",
+            '            typer.echo(f"Error {e.status_code}: {e.body}", err=True)',
+            "            raise typer.Exit(1)",
+        ]
+        if rspec.get("unwrap"):
+            lines.append("        if isinstance(_pre, dict):")
+            lines.append(f'            _pre = _pre.get("{rspec["unwrap"]}", _pre)')
+        lines.append(f'        params["{pname}"] = (_pre.get("{rspec["field"]}") or 0) '
+                     f"if isinstance(_pre, dict) else 0")
+    return lines
+
+
 def _cli_flag_for(f: EndpointField, op_ovr: dict) -> str:
     """Resolve the CLI flag stem, honoring param_cli_names (capability 3)."""
     override = (op_ovr.get("param_cli_names") or {}).get(f.name)
@@ -232,6 +271,13 @@ def _safe_arg(var: str) -> str:
 
 
 def _body_option_defs(ep: Endpoint, op_ovr: dict) -> list:
+    bpl = op_ovr.get("body_positional_list")
+    if bpl:
+        # body_positional_list: the whole request body is a JSON array built from
+        # ONE positional list argument (e.g. `prefs-rm FLOW_ID NAME [NAME...]`).
+        # Suppresses spec-derived body flags and --json-body.
+        return [f'    {bpl["arg"]}: list[str] = typer.Argument(..., '
+                f'help="{_esc(bpl.get("help", ""))}"),']
     if op_ovr.get("body_from_file"):
         return ['    body_file: str = typer.Argument(..., help="Path to JSON body file (or - for stdin)"),']
     defs = []
@@ -246,13 +292,20 @@ def _body_option_defs(ep: Endpoint, op_ovr: dict) -> list:
 
 def _body_build(ep: Endpoint, op_ovr: dict) -> list:
     body_defaults = op_ovr.get("body_defaults") or {}
+    bpl = op_ovr.get("body_positional_list")
+    if bpl:
+        return [f"    body = list({bpl['arg']})"]
     if op_ovr.get("body_from_file"):
         lines = [
             '    if body_file == "-":',
             "        body = json.load(sys.stdin)",
             "    else:",
-            '        with open(body_file) as _bf:',
-            "            body = json.load(_bf)",
+            "        try:",
+            '            with open(body_file) as _bf:',
+            "                body = json.load(_bf)",
+            "        except FileNotFoundError:",
+            '            typer.echo(f"Error: File not found: {body_file}", err=True)',
+            "            raise typer.Exit(1)",
         ]
         if op_ovr.get("body_transform") == "json-string":
             lines.append("    body = json.dumps(body)")
@@ -342,8 +395,12 @@ def _http_call(ep: Endpoint, op_ovr: dict, into: str = "data") -> list:
     ct = op_ovr.get("content_type") or ep.request_content_type or "application/json"
     if op_ovr.get("multipart"):
         return [path_line,
-                '    with open(file, "rb") as _fh:',
-                "        _content = _fh.read()",
+                "    try:",
+                '        with open(file, "rb") as _fh:',
+                "            _content = _fh.read()",
+                "    except FileNotFoundError:",
+                '        typer.echo(f"Error: File not found: {file}", err=True)',
+                "        raise typer.Exit(1)",
                 "    import os as _os",
                 "    try:",
                 f"        {into} = c.post_multipart(_path, _os.path.basename(file), _content, params=params)",
@@ -454,8 +511,11 @@ def render_command(ep: Endpoint, op_ovr: dict) -> str:
     lines = [f'@app.command("{name}")', f"def {func}("] + params + ["):", _docstring(ep, op_ovr)]
     lines += _warn_banner(op_ovr)
     if ep.command_type == "delete":
+        cm = op_ovr.get("confirm_message")
         confirm_target = _safe_arg(ep.path_vars[-1]) if [v for v in ep.path_vars if v not in ep.auto_inject_path_params] else None
-        if confirm_target:
+        if cm:
+            lines += ["    if not force:", f'        typer.confirm(f"{cm}", abort=True)']
+        elif confirm_target:
             lines += ["    if not force:", f'        typer.confirm(f"Delete {{{confirm_target}}}?", abort=True)']
         else:
             lines += ["    if not force:", '        typer.confirm("Delete this resource?", abort=True)']
@@ -468,9 +528,18 @@ def render_command(ep: Endpoint, op_ovr: dict) -> str:
     for wire, spec in inv.items():
         cli_py = spec["cli_name"].replace("-", "_")
         val = f"not {cli_py}" if spec.get("invert") else cli_py
-        lines += [f"    if {cli_py} is not None:", f'        params["{wire}"] = str({val}).lower()']
+        if "true_value" in spec:
+            # value-mapped bool flag: the wire wants e.g. yes/no, not true/false
+            # (findFlows_1 withDraftVersions silently ignores "true" — audit F1)
+            tv, fv = spec["true_value"], spec.get("false_value", "")
+            lines += [f"    if {cli_py} is not None:",
+                      f'        params["{wire}"] = {tv!r} if {val} else {fv!r}']
+        else:
+            lines += [f"    if {cli_py} is not None:", f'        params["{wire}"] = str({val}).lower()']
+    lines += _param_default_lines(op_ovr)
 
     if listy:
+        lines += _auto_resolve_lines(ep, op_ovr)
         lines += _render_list_body(ep, op_ovr, pg)
         lines += _emit_output(op_ovr, "items", True, _columns_repr(op_ovr, ep))
         return "\n".join(lines)
@@ -479,6 +548,15 @@ def render_command(ep: Endpoint, op_ovr: dict) -> str:
 
     if body_bearing and ep.has_request_body and not op_ovr.get("multipart"):
         lines += _body_build(ep, op_ovr)
+        if op_ovr.get("require_some_body"):
+            lines += [
+                "    if not body:",
+                '        typer.echo("Error: provide at least one field to set (see --help).", err=True)',
+                "        raise typer.Exit(1)",
+            ]
+    # auto_resolve AFTER the body build so client-side guards (missing file,
+    # empty body) fire before the pre-fetch network call (audit F5)
+    lines += _auto_resolve_lines(ep, op_ovr)
     lines += _http_call(ep, op_ovr, into="data")
     if ep.command_type == "delete" and not ep.has_request_body:
         lines += _emit_output(op_ovr, "data", False, "")

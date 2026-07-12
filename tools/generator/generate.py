@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import copy
 import fnmatch
 import json
 import sys
@@ -40,7 +41,22 @@ _OPID_SECTIONS = (
     "extra_commands", "auto_resolve_params",
     # Phase-B polish features (design 2026-07-12 "full polish"):
     "promote_to_argument", "success_echo", "expose_path_param",
+    # Phase-C parity features:
+    "param_defaults", "body_positional_list", "confirm_message", "require_some_body",
 )
+
+# Keys an extra_commands entry may set in its `overrides` block. These are the
+# RESOLVED per-command keys the renderer reads (e.g. `warn`, `item_key`,
+# `command_type`) — not the YAML top-level section names. A None/False value
+# clears the key inherited from the base op.
+_EXTRA_OVERRIDE_KEYS = {
+    "param_cli_names", "promote_to_argument", "success_echo", "expose_path_param",
+    "pagination", "item_key", "table_columns", "help_notes", "output_file_option",
+    "body_from_file", "body_fields_override", "body_transform", "exit_code_from",
+    "param_flag_inversions", "command_type", "body_defaults", "warn", "multipart",
+    "content_type", "auto_resolve", "param_defaults", "body_positional_list",
+    "confirm_message", "require_some_body",
+}
 
 # Non-opId-keyed top-level sections. Any top-level key not here or in
 # _OPID_SECTIONS is a typo/unknown and fails the lint (so a mistyped section name
@@ -92,6 +108,38 @@ def lint_overrides(overrides: dict, spec: dict) -> None:
         for oid in (overrides.get(section) or {}):
             if oid not in ops:
                 errors.append(f"{section}: operationId {oid!r} not in spec")
+    # auto_resolve_params: each target must be a declared query param of the op
+    for oid, specs in (overrides.get("auto_resolve_params") or {}).items():
+        op = ops.get(oid)
+        if op is None:
+            continue   # already reported above
+        declared = {p.get("name") for p in op.get("parameters", []) if p.get("in") == "query"}
+        for pname, rspec in (specs or {}).items():
+            if pname not in declared:
+                errors.append(f"auto_resolve_params.{oid}: {pname!r} is not a query param of the op")
+            if not isinstance(rspec, dict) or "field" not in rspec:
+                errors.append(f"auto_resolve_params.{oid}.{pname}: needs a 'field' key")
+            else:
+                unknown = set(rspec) - {"field", "unwrap", "forward_params"}
+                if unknown:
+                    errors.append(f"auto_resolve_params.{oid}.{pname}: unknown keys {sorted(unknown)}")
+    # extra_commands: entries need a name; overrides limited to resolved keys
+    for oid, entries in (overrides.get("extra_commands") or {}).items():
+        for i, entry in enumerate(entries or []):
+            if not isinstance(entry, dict) or not entry.get("name"):
+                errors.append(f"extra_commands.{oid}[{i}]: needs a 'name' key")
+                continue
+            unknown = set(entry) - {"name", "top_level", "doc", "overrides"}
+            if unknown:
+                errors.append(f"extra_commands.{oid}[{i}]: unknown keys {sorted(unknown)}")
+            bad = set(entry.get("overrides") or {}) - _EXTRA_OVERRIDE_KEYS
+            if bad:
+                errors.append(f"extra_commands.{oid}[{i}].overrides: unknown keys {sorted(bad)} "
+                              f"(use RESOLVED key names, e.g. warn/item_key/command_type)")
+    # body_positional_list: needs an arg name
+    for oid, bspec in (overrides.get("body_positional_list") or {}).items():
+        if not isinstance(bspec, dict) or not bspec.get("arg"):
+            errors.append(f"body_positional_list.{oid}: needs an 'arg' key")
     if errors:
         raise SystemExit("Override lint FAILED:\n  - " + "\n  - ".join(errors))
 
@@ -120,6 +168,11 @@ def build_resolver(overrides: dict):
     promote_arg = overrides.get("promote_to_argument") or {}
     success_echo = overrides.get("success_echo") or {}
     expose_path = overrides.get("expose_path_param") or {}
+    auto_resolve = overrides.get("auto_resolve_params") or {}
+    param_dflts = overrides.get("param_defaults") or {}
+    body_pos = overrides.get("body_positional_list") or {}
+    confirm_msg = overrides.get("confirm_message") or {}
+    require_body = overrides.get("require_some_body") or {}
 
     def resolve(ep):
         oid = ep.operation_id
@@ -171,6 +224,16 @@ def build_resolver(overrides: dict):
             o["command_type"] = type_ovr[oid]
         if oid in body_defaults:
             o["body_defaults"] = body_defaults[oid]
+        if oid in auto_resolve:
+            o["auto_resolve"] = auto_resolve[oid]
+        if oid in param_dflts:
+            o["param_defaults"] = param_dflts[oid]
+        if oid in body_pos:
+            o["body_positional_list"] = body_pos[oid]
+        if oid in confirm_msg:
+            o["confirm_message"] = confirm_msg[oid]
+        if require_body.get(oid):
+            o["require_some_body"] = True
         return o
 
     return resolve
@@ -190,26 +253,17 @@ def build_group(group: str, source_tags: list, spec: dict, overrides: dict,
     warned ops are kept (as stub / warning command). Fails on a duplicate command
     name within the group (design § 5 collision lint)."""
     auto_inject = set(overrides.get("auto_inject_from_config") or ["orgId", "projectId"])
+    extras_by_op = overrides.get("extra_commands") or {}
     endpoints: list = []
     for tag in source_tags:
         endpoints.extend(parse_tag(tag, spec, auto_inject=auto_inject, seen=seen))
 
-    kept: list = []
-    rows: list = []
-    names_seen: dict = {}
-    for ep in endpoints:
-        o = resolve(ep)
-        if o.get("skip"):
-            continue
-        cmd = o["command_name"]
-        names_seen.setdefault(cmd, []).append(ep.operation_id)
-        kept.append((ep, o))
-        status = "blocked" if o.get("block") else ("warn" if o.get("warn") else "generated")
+    def _row(ep, o, cmd, status, extra=False):
         non_inject_path = [v for v in ep.path_vars if v not in ep.auto_inject_path_params]
         required = ([f"<{v}>" for v in non_inject_path]
                     + [q.name for q in ep.query_params if q.required]
                     + [f.name for f in ep.body_fields if f.required])
-        rows.append({
+        row = {
             "group": group,
             "command": cmd,
             "operationId": ep.operation_id,
@@ -218,7 +272,42 @@ def build_group(group: str, source_tags: list, spec: dict, overrides: dict,
             "read_only": ep.method == "GET" and status != "blocked",
             "required_params": required,
             "status": status,
-        })
+        }
+        if extra:
+            row["extra"] = True
+        return row
+
+    kept: list = []
+    rows: list = []
+    names_seen: dict = {}
+    for ep in endpoints:
+        o = resolve(ep)
+        extras = extras_by_op.get(ep.operation_id) or []
+        if o.get("skip"):
+            if extras:
+                raise SystemExit(f"extra_commands: {ep.operation_id!r} is skipped — cannot clone it")
+            continue
+        cmd = o["command_name"]
+        names_seen.setdefault(cmd, []).append(ep.operation_id)
+        kept.append((ep, o))
+        status = "blocked" if o.get("block") else ("warn" if o.get("warn") else "generated")
+        rows.append(_row(ep, o, cmd, status))
+        if extras and status == "blocked":
+            raise SystemExit(f"extra_commands: {ep.operation_id!r} is a blocked stub — cannot clone it")
+        # extra_commands: clone the op into additional commands. The clone starts
+        # from the base's RESOLVED overrides; the entry's `overrides` block is laid
+        # on top (a None/False value clears the inherited key).
+        for entry in extras:
+            ep2 = copy.deepcopy(ep)
+            if entry.get("doc"):
+                ep2.name = entry["doc"]
+            o2 = dict(o)
+            o2["command_name"] = entry["name"]
+            o2.update(entry.get("overrides") or {})
+            names_seen.setdefault(entry["name"], []).append(f'{ep.operation_id}+extra')
+            kept.append((ep2, o2))
+            status2 = "warn" if o2.get("warn") else "generated"
+            rows.append(_row(ep2, o2, entry["name"], status2, extra=True))
     dupes = {n: ids for n, ids in names_seen.items() if len(ids) > 1}
     if dupes:
         detail = "; ".join(f"{n} <- {ids}" for n, ids in dupes.items())
@@ -300,9 +389,13 @@ def _build_promotions(overrides: dict, groups_data: list) -> list:
     validating each op is generated (not skipped/blocked) and each name is unique."""
     top_level = overrides.get("top_level_commands") or {}
     loc: dict = {}
+    extra_loc: dict = {}
     for _g, _kept, rows in groups_data:
         for row in rows:
-            loc[row["operationId"]] = (row["group"], row["command"], row["status"])
+            if row.get("extra"):
+                extra_loc[(row["operationId"], row["command"])] = (row["group"], row["command"])
+            else:
+                loc[row["operationId"]] = (row["group"], row["command"], row["status"])
     promotions: list = []
     errors: list = []
     by_name: dict = {}
@@ -319,6 +412,23 @@ def _build_promotions(overrides: dict, groups_data: list) -> list:
             continue
         by_name[name] = oid
         promotions.append((group, cmd, name))
+    # extra_commands entries promote via their own top_level key (the base opId
+    # already maps to the base command in top_level_commands, so it can't carry two)
+    for oid, entries in (overrides.get("extra_commands") or {}).items():
+        for entry in entries or []:
+            name = entry.get("top_level")
+            if not name:
+                continue
+            key = (oid, entry.get("name"))
+            if key not in extra_loc:
+                errors.append(f"extra_commands.{oid}: {entry.get('name')!r} not in the generated set — cannot promote")
+                continue
+            if name in by_name:
+                errors.append(f"name {name!r} promoted twice ({by_name[name]} and {oid}+extra)")
+                continue
+            by_name[name] = f"{oid}+extra"
+            group, cmd = extra_loc[key]
+            promotions.append((group, cmd, name))
     if errors:
         raise SystemExit("top_level_commands lint FAILED:\n  - " + "\n  - ".join(errors))
     return promotions

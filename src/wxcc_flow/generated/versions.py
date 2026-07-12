@@ -60,6 +60,7 @@ def get(
     flow_id: str = typer.Argument(..., help="flowId"),
     version_id: str = typer.Argument(..., help="versionId"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
+    out: str = typer.Option(None, "--out", help="Write response JSON to FILE"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """getFlowVersionById. [operationId: getFlowVersionById]"""
@@ -71,6 +72,11 @@ def get(
     except FlowStoreError as e:
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
+    if out:
+        with open(out, "w") as _of:
+            import json as _json; _json.dump(data, _of, indent=2, default=str)
+        typer.echo(f"Wrote {out}")
+        return
     print_json(data)
 
 
@@ -78,6 +84,7 @@ def get(
 def latest(
     flow_id: str = typer.Argument(..., help="flowId"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
+    out: str = typer.Option(None, "--out", help="Write response JSON to FILE"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """getLatestFlowVersion. [operationId: getLatestFlowVersion]"""
@@ -89,6 +96,11 @@ def latest(
     except FlowStoreError as e:
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
+    if out:
+        with open(out, "w") as _of:
+            import json as _json; _json.dump(data, _of, indent=2, default=str)
+        typer.echo(f"Wrote {out}")
+        return
     print_json(data)
 
 
@@ -96,6 +108,7 @@ def latest(
 def draft(
     flow_id: str = typer.Argument(..., help="flowId"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
+    out: str = typer.Option(None, "--out", help="Write response JSON to FILE"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """getLatestFlowDraftVersion. [operationId: getLatestFlowDraftVersion]"""
@@ -107,6 +120,11 @@ def draft(
     except FlowStoreError as e:
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
+    if out:
+        with open(out, "w") as _of:
+            import json as _json; _json.dump(data, _of, indent=2, default=str)
+        typer.echo(f"Wrote {out}")
+        return
     print_json(data)
 
 
@@ -154,7 +172,7 @@ def cmd_all(
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
     if output == "table":
-        print_table(items, columns=[('Flow', 'flowId'), ('Version', 'version'), ('Tag', 'tag')], limit=0)
+        print_table(items, columns=[('Version ID', 'id'), ('Name', 'name'), ('Version', 'version'), ('Type', 'flowType'), ('Created', 'createdDate')], limit=0)
     else:
         print_json(items)
 
@@ -165,7 +183,7 @@ def all_latest(
     debug: bool = typer.Option(False, "--debug"),
 ):
     """findAllLatestFlowVersions. [operationId: findAllLatestFlowVersions]"""
-    typer.echo("Warning: 500s org-wide when never-published flows exist; fall back to 'api versions all'", err=True)
+    typer.echo("Warning: 500s org-wide when never-published flows exist; fall back to paged 'wxcc-flow all-versions'", err=True)
     c = FlowClient(debug=debug)
     params = {}
     _path = f"/{c.org_id}/project/{c.project_id}/flows/versions/all-latest"

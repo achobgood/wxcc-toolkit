@@ -153,8 +153,12 @@ def cmd_import(
     if overwrite is not None:
         params["overwrite"] = overwrite
     _path = f"/{c.org_id}/project/{c.project_id}/widgets:import"
-    with open(file, "rb") as _fh:
-        _content = _fh.read()
+    try:
+        with open(file, "rb") as _fh:
+            _content = _fh.read()
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
     import os as _os
     try:
         data = c.post_multipart(_path, _os.path.basename(file), _content, params=params)

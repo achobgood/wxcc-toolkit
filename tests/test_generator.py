@@ -366,6 +366,185 @@ class TestPromotions:
         assert "top_level" not in by_cmd["create"]              # unpromoted stays clean
 
 
+class TestPhaseCFeatures:
+    """Phase-C parity features: auto_resolve_params, extra_commands,
+    param_defaults, body_positional_list, confirm_message, require_some_body."""
+
+    def _unblocked(self):
+        ovr = mini_overrides()
+        ovr.pop("blocked_endpoints")            # render mergeWidget as a real PATCH
+        return ovr
+
+    def test_auto_resolve_renders_prefetch(self, spec):
+        ovr = self._unblocked()
+        ovr["auto_resolve_params"] = {"mergeWidget": {"expectedVersion": {
+            "unwrap": "widget", "field": "version", "forward_params": ["flowType"]}}}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert '    if "expectedVersion" not in params:' in code
+        assert "_rp = {k: params[k] for k in ['flowType'] if k in params}" in code
+        assert '_pre = c.get(f"/{c.org_id}/project/{c.project_id}/widgets/{widget_id}", params=_rp)' in code
+        assert '_pre = _pre.get("widget", _pre)' in code
+        assert 'params["expectedVersion"] = (_pre.get("version") or 0) if isinstance(_pre, dict) else 0' in code
+        ast.parse(code)
+
+    def test_auto_resolve_lint_rejects_non_query_param(self, spec):
+        ovr = self._unblocked()
+        ovr["auto_resolve_params"] = {"mergeWidget": {"notAParam": {"field": "version"}}}
+        with pytest.raises(SystemExit, match="not a query param"):
+            G.lint_overrides(ovr, spec)
+
+    def test_auto_resolve_lint_requires_field(self, spec):
+        ovr = self._unblocked()
+        ovr["auto_resolve_params"] = {"mergeWidget": {"expectedVersion": {"unwrap": "widget"}}}
+        with pytest.raises(SystemExit, match="'field'"):
+            G.lint_overrides(ovr, spec)
+
+    def test_param_defaults_setdefault_after_query_build(self, spec):
+        ovr = mini_overrides()
+        ovr["param_defaults"] = {"findWidgets": {"kind": "draft"}}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert "    params.setdefault(\"kind\", 'draft')" in code
+        # explicit flag wins: the setdefault must come AFTER the query build
+        assert code.index('params["kind"] = kind') < code.index('params.setdefault("kind"')
+        ast.parse(code)
+
+    def test_require_some_body_guard(self, spec):
+        ovr = mini_overrides()
+        ovr["require_some_body"] = {"createWidget": True}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert "    if not body:" in code
+        assert "provide at least one field" in code
+        ast.parse(code)
+
+    def test_body_positional_list_and_confirm_message(self, spec):
+        ovr = {
+            "groups": {"widget-tags": ["WidgetTags"]},
+            "auto_inject_from_config": ["orgId", "projectId"],
+            "command_names": {"removeWidgetTags": "remove"},
+            "body_positional_list": {"removeWidgetTags": {"arg": "names", "help": "Tag names"}},
+            "confirm_message": {"removeWidgetTags": "Remove tags from widget {widget_id}?"},
+        }
+        G.lint_overrides(ovr, spec)
+        resolve = G.build_resolver(ovr)
+        kept, _rows = G.build_group("widget-tags", ["WidgetTags"], spec, ovr, resolve, set())
+        ovr_map = {id(ep): o for ep, o in kept}
+        code = R.render_group_module("widget-tags", [ep for ep, _o in kept], lambda ep: ovr_map[id(ep)])
+        assert 'names: list[str] = typer.Argument(..., help="Tag names")' in code
+        assert "    body = list(names)" in code
+        assert '"--json-body"' not in code                     # suppressed
+        assert 'typer.confirm(f"Remove tags from widget {widget_id}?", abort=True)' in code
+        assert "c.delete_with_body(_path, json_body=body)" in code
+        ast.parse(code)
+
+    def test_body_positional_list_lint_requires_arg(self, spec):
+        ovr = mini_overrides()
+        ovr["body_positional_list"] = {"createWidget": {"help": "no arg key"}}
+        with pytest.raises(SystemExit, match="'arg'"):
+            G.lint_overrides(ovr, spec)
+
+    def test_value_mapped_bool_flag(self, spec):
+        """Audit F1: an inversion spec with true_value/false_value maps the bool
+        flag to custom wire values (yes/no) instead of str(bool).lower()."""
+        ovr = mini_overrides()
+        ovr["param_flag_inversions"] = {"findWidgets": {
+            "kind": {"cli_name": "with-drafts", "true_value": "yes", "false_value": "no"}}}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert '"--with-drafts/--no-with-drafts"' in code
+        assert "params[\"kind\"] = 'yes' if with_drafts else 'no'" in code
+        ast.parse(code)
+
+    def test_file_not_found_guard(self, spec):
+        """Audit F3: body_from_file and multipart opens fail with a clean error,
+        not a traceback."""
+        ovr = mini_overrides()
+        ovr["body_from_file"] = {"createWidget": True}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert "except FileNotFoundError:" in code
+        assert 'typer.echo(f"Error: File not found: {body_file}", err=True)' in code
+        assert 'typer.echo(f"Error: File not found: {file}", err=True)' in code  # multipart import
+
+    def test_auto_resolve_after_body_guards(self, spec):
+        """Audit F5: the auto_resolve pre-fetch is emitted AFTER the body build
+        and require_some_body guard, so client-side errors fire before any call."""
+        ovr = self._unblocked()
+        ovr["auto_resolve_params"] = {"mergeWidget": {"expectedVersion": {"field": "version"}}}
+        ovr["require_some_body"] = {"mergeWidget": True}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert code.index("provide at least one field") < code.index('"expectedVersion" not in params')
+        ast.parse(code)
+
+
+class TestExtraCommands:
+    def test_clone_renders_alongside_base(self, spec):
+        ovr = mini_overrides()
+        ovr["extra_commands"] = {"findWidgets": [{
+            "name": "search", "doc": "Search widgets by kind",
+            "overrides": {"promote_to_argument": ["kind"]}}]}
+        code, kept, rows = _render_widgets(spec, ovr)
+        assert '@app.command("list")' in code
+        assert '@app.command("search")' in code
+        assert '"""Search widgets by kind.' in code
+        # clone: kind is positional; base: kind stays an Option
+        assert "kind: str = typer.Argument(" in code
+        assert '"--kind"' in code
+        by_cmd = {r["command"]: r for r in rows}
+        assert by_cmd["search"].get("extra") is True
+        assert "extra" not in by_cmd["list"]
+        ast.parse(code)
+
+    def test_clone_clears_inherited_key_with_none(self, spec):
+        """A None override clears a key inherited from the base (e.g. warn)."""
+        ovr = mini_overrides()
+        ovr["extra_commands"] = {"refreshWidgets": [{
+            "name": "refresh-quiet", "overrides": {"warn": None}}]}
+        code, _k, rows = _render_widgets(spec, ovr)
+        base = code[code.index('@app.command("refresh")'):code.index('@app.command("refresh-quiet")')]
+        clone = code[code.index('@app.command("refresh-quiet")'):]
+        assert "Warning:" in base and "Warning:" not in clone
+        by_cmd = {r["command"]: r for r in rows}
+        assert by_cmd["refresh-quiet"]["status"] == "generated"   # warn cleared
+
+    def test_clone_of_skipped_or_blocked_fails(self, spec):
+        ovr = mini_overrides()
+        ovr["skip_endpoints"] = {"refreshWidgets": "skipped"}
+        ovr["extra_commands"] = {"refreshWidgets": [{"name": "x"}]}
+        with pytest.raises(SystemExit, match="skipped"):
+            _render_widgets(spec, ovr)
+        ovr2 = mini_overrides()
+        ovr2["extra_commands"] = {"mergeWidget": [{"name": "x"}]}    # blocked stub
+        with pytest.raises(SystemExit, match="blocked"):
+            _render_widgets(spec, ovr2)
+
+    def test_clone_lint_rejects_unknown_override_key(self, spec):
+        ovr = mini_overrides()
+        ovr["extra_commands"] = {"findWidgets": [{
+            "name": "search", "overrides": {"warn_endpoints": "wrong-level key"}}]}
+        with pytest.raises(SystemExit, match="RESOLVED key names"):
+            G.lint_overrides(ovr, spec)
+
+    def test_clone_promotes_via_top_level(self, spec):
+        ovr = mini_overrides()
+        ovr["top_level_commands"] = {"findWidgets": "list"}
+        ovr["extra_commands"] = {"findWidgets": [{
+            "name": "search", "top_level": "search",
+            "overrides": {"promote_to_argument": ["kind"]}}]}
+        G.lint_overrides(ovr, spec)
+        resolve = G.build_resolver(ovr)
+        kept, rows = G.build_group("widgets", ["Widgets"], spec, ovr, resolve, set())
+        promos = G._build_promotions(ovr, [("widgets", kept, rows)])
+        assert ("widgets", "list", "list") in promos
+        assert ("widgets", "search", "search") in promos
+
+    def test_clone_top_level_name_collision_fails(self, spec):
+        ovr = mini_overrides()
+        ovr["top_level_commands"] = {"findWidgets": "search"}
+        ovr["extra_commands"] = {"findWidgets": [{"name": "search", "top_level": "search"}]}
+        resolve = G.build_resolver(ovr)
+        kept, rows = G.build_group("widgets", ["Widgets"], spec, ovr, resolve, set())
+        with pytest.raises(SystemExit, match="promoted twice"):
+            G._build_promotions(ovr, [("widgets", kept, rows)])
+
+
 class TestPromotionRuntime:
     """The generated package's register() guard, against the real 21 promotions."""
 
