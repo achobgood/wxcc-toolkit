@@ -162,10 +162,55 @@ class FlowClient:
         self._handle_error(resp)
         return resp.json() if resp.content else {}
 
-    def put(self, path: str, json_body=None) -> dict:
+    def put(self, path: str, json_body=None, params: Optional[dict] = None) -> dict:
         url = self._url(path)
         self._log_request("PUT", url, json_body)
-        resp = httpx.put(url, headers=self._headers(), json=json_body, timeout=60)
+        resp = httpx.put(url, headers=self._headers(), json=json_body, params=params, timeout=60)
+        self._log_response(resp)
+        self._handle_error(resp)
+        return resp.json() if resp.content else {}
+
+    def patch(self, path: str, json_body=None, params: Optional[dict] = None,
+              content_type: str = "application/json") -> dict:
+        """PATCH with a configurable content type.
+
+        v2 patchDraft takes plain application/json; v1 mergePatchFlow takes
+        application/merge-patch+json.
+        """
+        url = self._url(path)
+        self._log_request("PATCH", url, json_body)
+        headers = self._headers()
+        headers["Content-Type"] = content_type
+        resp = httpx.patch(url, headers=headers, content=json.dumps(json_body),
+                           params=params, timeout=60)
+        self._log_response(resp)
+        self._handle_error(resp)
+        return resp.json() if resp.content else {}
+
+    def post_multipart(self, path: str, filename: str, content: bytes,
+                       params: Optional[dict] = None) -> dict:
+        """POST a file as a multipart 'file' part (v1 flows:import).
+
+        The live contract's requestBody for importFlowVersion_1 is
+        {file: binary} — sending raw JSON instead 500s with
+        "Oops... Something broke..." (verified 2026-07-11).
+        """
+        url = self._url(path)
+        self._log_request("POST", url)
+        headers = {"Authorization": f"Bearer {self._token}"}  # no Content-Type: httpx sets the multipart boundary
+        resp = httpx.post(url, headers=headers, params=params,
+                          files={"file": (filename, content, "application/json")},
+                          timeout=60)
+        self._log_response(resp)
+        self._handle_error(resp)
+        return resp.json() if resp.content else {}
+
+    def delete_with_body(self, path: str, json_body=None) -> dict:
+        """DELETE with a JSON body (flow preferences delete takes a name list)."""
+        url = self._url(path)
+        self._log_request("DELETE", url, json_body)
+        resp = httpx.request("DELETE", url, headers=self._headers(),
+                             json=json_body, timeout=30)
         self._log_response(resp)
         self._handle_error(resp)
         return resp.json() if resp.content else {}
@@ -211,14 +256,14 @@ class FlowClient:
     def v2_activities(self) -> str:
         return f"/{self.org_id}/project/{self.project_id}/v2/activities"
 
-    def get_activity_definition(self, name: str) -> dict:
+    def get_activity_definition(self, name: str, flow_type: str = "FLOW") -> dict:
         """Fetch the full activity definition from the activities list endpoint.
 
         Prod returns a flat list of activities keyed by `activityName`. (Older
         deployments returned a dict keyed by category with a `name` field —
         handled for back-compat.)
         """
-        data = self.get(self.v2_activities())
+        data = self.get(self.v2_activities(), params={"flowType": flow_type})
         if isinstance(data, list):
             for act in data:
                 if isinstance(act, dict) and act.get("activityName") == name:

@@ -136,11 +136,12 @@ FLOW_COLUMNS = [
 @app.command("list")
 def list_flows(
     output: str = typer.Option("table", "-o", "--output", help="Output format: table|json"),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
     debug: bool = typer.Option(False, "--debug"),
 ):
-    """List all flows."""
+    """List all flows (or subflows with --type SUBFLOW)."""
     c = _client(debug)
-    flows = _get_all_flows(c)
+    flows = _get_all_flows(c, {"flowType": flow_type})
 
     if output == "json":
         print_json(flows)
@@ -182,6 +183,7 @@ def get(
 def search(
     query: str = typer.Argument(..., help="Search query"),
     output: str = typer.Option("table", "-o", "--output"),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Search flows by name (case-insensitive substring match).
@@ -190,7 +192,7 @@ def search(
     matches the exact, case-sensitive full name.
     """
     c = _client(debug)
-    flows = _get_all_flows(c, {"partialNameSearch": query})
+    flows = _get_all_flows(c, {"partialNameSearch": query, "flowType": flow_type})
     if output == "json":
         print_json(flows)
     else:
@@ -201,13 +203,15 @@ def search(
 def create(
     file: str = typer.Argument(..., help="Path to flow (FlowV2) JSON file"),
     overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite if a flow with the same name exists"),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Import/create a flow from a FlowV2 JSON file."""
     c = _client(debug)
     flowir = _read_flowir(file)
     data = c.post(f"{c.v2_flows()}:import", json_body=flowir,
-                  params={"overwrite": str(overwrite).lower()})
+                  params={"overwrite": str(overwrite).lower(),
+                          "flowType": flow_type})
     flow = data.get("flow", data) if isinstance(data, dict) else data
     typer.echo(f"Created flow: {flow.get('name', 'unknown')}  id={flow.get('id', 'unknown')}")
     print_json(data)
@@ -219,17 +223,19 @@ def save_draft(
     file: str = typer.Argument(..., help="Path to flow (FlowV2) JSON file"),
     expected_version: int = typer.Option(None, "--expected-version",
         help="Optimistic-lock version; auto-resolved from the current flow if omitted"),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Save a FlowV2 file as the draft of an existing flow."""
     c = _client(debug)
     flowir = _read_flowir(file)
     if expected_version is None:
-        current = c.get(c.v2_flow(flow_id))
+        current = c.get(c.v2_flow(flow_id), params={"flowType": flow_type})
         cur = current.get("flow", current) if isinstance(current, dict) else current
         expected_version = cur.get("version", 0) or 0
     data = c.post(c.v2_flow(flow_id), json_body=flowir,
-                  params={"expectedVersion": expected_version})
+                  params={"expectedVersion": expected_version,
+                          "flowType": flow_type})
     typer.echo(f"Draft saved for flow {flow_id} (expectedVersion={expected_version})")
     if data:
         print_json(data)
@@ -239,11 +245,16 @@ def save_draft(
 def export(
     flow_id: str = typer.Argument(..., help="Flow ID"),
     out: str = typer.Option(None, "-o", "--out", help="Output file path (default: stdout)"),
+    version: str = typer.Option("draft", "--version",
+        help="'draft' (default, matches historical behavior), 'latest' "
+             "(most recent published version), or a version ID"),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
     debug: bool = typer.Option(False, "--debug"),
 ):
-    """Export a flow as FlowV2 JSON (reads the current draft)."""
+    """Export a flow as FlowV2 JSON (draft, latest published, or a version)."""
     c = _client(debug)
-    data = c.get(c.v2_flow(flow_id))
+    data = c.get(f"{c.v2_flow(flow_id)}:export",
+                 params={"version": version, "flowType": flow_type})
     if out:
         _write_json(data, out)
     else:
@@ -254,11 +265,12 @@ def export(
 def draft(
     flow_id: str = typer.Argument(..., help="Flow ID"),
     out: str = typer.Option(None, "-o", "--out", help="Output file path"),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Get the current draft of a flow as FlowV2 JSON."""
     c = _client(debug)
-    data = c.get(c.v2_flow(flow_id))
+    data = c.get(c.v2_flow(flow_id), params={"flowType": flow_type})
     if out:
         _write_json(data, out)
     else:
@@ -269,13 +281,17 @@ def draft(
 def validate(
     file: str = typer.Argument(None, help="Path to flow (FlowV2) JSON file"),
     flow_id: str = typer.Option(None, "--id", help="Validate a persisted flow by ID"),
+    version: str = typer.Option("draft", "--version",
+        help="With --id: 'draft' or a specific version ID to validate"),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Validate a FlowV2 file (dry-run) or a persisted flow (--id)."""
     c = _client(debug)
     if flow_id:
         # Persisted flow: dedicated read-only validate endpoint.
-        result = c.get(f"{c.v2_flow(flow_id)}:validate")
+        result = c.get(f"{c.v2_flow(flow_id)}:validate",
+                       params={"versionId": version, "flowType": flow_type})
     elif file:
         flowir = _read_flowir(file)
         result = c.post(f"{c.v2_flows()}:validate", json_body=flowir)
@@ -307,13 +323,14 @@ def publish(
              "default: the CLI workflow validates explicitly beforehand "
              "('wxcc-flow validate'), and publish-time validation can "
              "false-positive (e.g. FC1015 on hand-off flows)."),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Publish a flow draft (add --validate to validate at publish time)."""
     c = _client(debug)
     skip = "false" if validate_first else "true"
     data = c.post(f"{c.v1_flow(flow_id)}:publish", json_body={},
-                  params={"skipValidation": skip})
+                  params={"skipValidation": skip, "flowType": flow_type})
     typer.echo(f"Published flow {flow_id}")
     if data:
         print_json(data)
@@ -322,22 +339,24 @@ def publish(
 @app.command()
 def lock(
     flow_id: str = typer.Argument(..., help="Flow ID"),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Lock a flow for editing."""
     c = _client(debug)
-    c.post(f"{c.v1_flow(flow_id)}:lock")
+    c.post(f"{c.v1_flow(flow_id)}:lock", params={"flowType": flow_type})
     typer.echo(f"Locked flow {flow_id}")
 
 
 @app.command()
 def unlock(
     flow_id: str = typer.Argument(..., help="Flow ID"),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Unlock a flow."""
     c = _client(debug)
-    c.post(f"{c.v1_flow(flow_id)}:unlock")
+    c.post(f"{c.v1_flow(flow_id)}:unlock", params={"flowType": flow_type})
     typer.echo(f"Unlocked flow {flow_id}")
 
 
@@ -382,9 +401,9 @@ def versions(
         print_table(vlist, cols)
 
 
-def _find_activity_safe(client: FlowClient, name: str):
+def _find_activity_safe(client: FlowClient, name: str, flow_type: str = "FLOW"):
     """Find an activity by name, returning None if not found."""
-    data = client.get(client.v2_activities())
+    data = client.get(client.v2_activities(), params={"flowType": flow_type})
     if isinstance(data, list):
         for act in data:
             if isinstance(act, dict) and act.get("activityName") == name:
@@ -424,11 +443,12 @@ def _iter_inputs(act: dict, deep: bool = False):
 @app.command()
 def activities(
     output: str = typer.Option("table", "-o", "--output"),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW (registries differ)"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """List all available activities."""
     c = _client(debug)
-    data = c.get(c.v2_activities())
+    data = c.get(c.v2_activities(), params={"flowType": flow_type})
     # Response is a dict keyed by category (logic, action, etc.), each containing a list
     items = []
     if isinstance(data, dict):
@@ -451,11 +471,12 @@ def activities(
 def describe(
     activity: str = typer.Argument(..., help="Activity name (e.g. play-message)"),
     output: str = typer.Option("table", "-o", "--output"),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Describe an activity — properties, inputs, outputs."""
     c = _client(debug)
-    act = c.get_activity_definition(activity)
+    act = c.get_activity_definition(activity, flow_type=flow_type)
 
     if output == "json":
         print_json(act)
@@ -679,6 +700,7 @@ def _print_output_ports(act: dict) -> None:
 def schema(
     activity: str = typer.Argument(..., help="Activity name"),
     output: str = typer.Option("table", "-o", "--output"),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Build a FlowIR node template from the activity definition.
@@ -687,7 +709,7 @@ def schema(
     is no /schema endpoint on prod; propertyHints names were wrong).
     """
     c = _client(debug)
-    act = c.get_activity_definition(activity)
+    act = c.get_activity_definition(activity, flow_type=flow_type)
 
     if output == "json":
         print_json(act)
@@ -813,11 +835,12 @@ def choices(
         help="Parent input name for cascading choices (e.g. channelType)"),
     parent_value: str = typer.Option(None, "--parent-value",
         help="Selected parent value for cascading choices (e.g. TELEPHONY)"),
+    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Get dropdown values for an activity input."""
     c = _client(debug)
-    params = {}
+    params = {"flowType": flow_type}
     if search_query:
         params["search"] = search_query
     if parent_input:
@@ -878,11 +901,13 @@ def choices(
 @app.command("global-vars")
 def global_vars(
     output: str = typer.Option("table", "-o", "--output"),
+    search: str = typer.Option(None, "--search", help="Filter by name"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """List org-level global variables."""
     c = _client(debug)
-    data = c.get(f"{c.v1_flows()}/global-variables")
+    params = {"search": search} if search else None
+    data = c.get(f"{c.v1_flows()}/global-variables", params=params)
     items = data if isinstance(data, list) else data.get("variables", data.get("globalVariables", data.get("items", [])))
     cols = [("Name", "name"), ("Type", "type"), ("Value", "value")]
     if output == "json":
@@ -1008,14 +1033,27 @@ def events(
 @app.command("test-expr")
 def test_expr(
     expression: str = typer.Argument(..., help="Flow expression to test"),
+    var: list[str] = typer.Option(None, "--var", help="Variable binding KEY=VALUE (repeatable)"),
     debug: bool = typer.Option(False, "--debug"),
 ):
-    """Test a Pebble/flow expression."""
+    """Test a Pebble/flow expression, optionally with variable bindings."""
     c = _client(debug)
     # Body field is `expr` (undocumented — ExpressionTestRequest is an
     # empty schema in /v3/api-docs; other names silently fail with a
-    # "compiledTemplate is null" error).
-    data = c.post("/expressionTest", json_body={"expr": expression})
+    # "compiledTemplate is null" error). The endpoint also accepts a
+    # `variables` map: {"expr": "{{ foo }}", "variables": {"foo": "bar"}}
+    # → generatedValue "bar" (verified via raw curl 2026-07-11).
+    body = {"expr": expression}
+    if var:
+        variables = {}
+        for binding in var:
+            if "=" not in binding:
+                typer.echo(f"Error: --var must be KEY=VALUE, got '{binding}'", err=True)
+                raise typer.Exit(1)
+            key, _, value = binding.partition("=")
+            variables[key] = value
+        body["variables"] = variables
+    data = c.post("/expressionTest", json_body=body)
     print_json(data)
 
 
@@ -1088,6 +1126,12 @@ def health(debug: bool = typer.Option(False, "--debug")):
 # ── Init (materialize the bundled Claude Code playbook) ──────────────
 from wxcc_flow.init_playbook import init as init_command  # noqa: E402
 app.command(name="init")(init_command)
+
+# ── Extended command groups (tracing, lifecycle, platform) ───────────
+from wxcc_flow import commands_tracing, commands_lifecycle, commands_platform  # noqa: E402
+commands_tracing.register(app)
+commands_lifecycle.register(app)
+commands_platform.register(app)
 
 
 def run():

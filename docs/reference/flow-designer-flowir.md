@@ -1,4 +1,4 @@
-<!-- ref-tag: fd-flowir-v3 -->
+<!-- ref-tag: fd-flowir-v4 -->
 
 # Flow Designer FlowIR Reference
 
@@ -1171,11 +1171,11 @@ Output variables (from definition): `QueueId`, `status`, `FailureCode`, `Failure
 
 ### NewSubFlowStart (Start Subflow)
 
-No configurable properties. Automatically placed as the entry point of a subflow. For subflow start nodes in FlowIR import, use `activityName: "start"` with `activityType: "start-subflow"` — the server resolves `start` to `NewSubFlowStart` automatically.
+No configurable properties. Automatically placed as the entry point of a subflow. For subflow start nodes in FlowIR import, use `activityName: "start"` with `activityType: "start-subflow"` — the server resolves `start` to `NewSubFlowStart` automatically (the stored draft then reads back `activityType: "start"`; round-trip verified live 2026-07-11).
 
-### end-subflow (End Subflow) (⚠️ NOT IMPORTABLE — returns ACTIVITY_NOT_FOUND on create; use `end` as substitute)
+### end-subflow (End Subflow)
 
-No configurable properties. Terminal node that returns control to the calling flow. Note: despite appearing in the registry and passing validation, `end-subflow` triggers `ACTIVITY_NOT_FOUND` on create. Use the `end` activity as a substitute, though it lacks the subflow return-to-caller semantics.
+No configurable properties. Terminal node that returns control to the calling flow. Importable ONLY when the import call carries the `?flowType=SUBFLOW` query param (`wxcc-flow create file.json --type SUBFLOW`) — without it, the server resolves activities against the FLOW registry and returns `ACTIVITY_NOT_FOUND` (verified live 2026-07-11; use `activityType: "end"` on the node). Dry-run validate (`POST /v2/flows:validate`) has no flowType query param, so it also resolves `end-subflow` against the FLOW registry and fails with ACTIVITY_NOT_FOUND even for a valid subflow — validate subflows post-create with `wxcc-flow validate --id ID --type SUBFLOW` instead.
 
 ### end (End Flow)
 
@@ -1306,6 +1306,27 @@ POST /{orgId}/project/{projectId}/flows/{flowId}:publish?skipValidation=true
 
 Publishes the draft. Only available via REST API, not MCP. `skipValidation` (default `false` on the server) controls whether the server re-validates at publish time. `wxcc-flow publish` skips it by default because the CLI workflow validates explicitly beforehand (`wxcc-flow validate`) and publish-time validation can false-positive (e.g. FC1015 on hand-off flows); pass `wxcc-flow publish FLOW_ID --validate` to validate at publish time instead (both paths verified live 2026-07-11).
 
+### Step 6: Iterate with PATCH (partial draft updates)
+
+```
+PATCH /{orgId}/project/{projectId}/v2/flows/{flowId}?expectedVersion=N
+Content-Type: application/json
+Body: {"upsert_nodes": [...], "upsert_edges": [...],
+       "remove_node_names": [...], "remove_edge_keys": [{"from","to","condition"}]}
+```
+
+CLI: `wxcc-flow patch FLOW_ID patch.json` (auto-resolves `expectedVersion` from the current draft). Top-level FlowV2 fields (`name`, `description`, `variables`, …) can also be patched directly — this is how renames work (`wxcc-flow update FLOW_ID --name NEW`); the new name propagates to the flow level (list/get) on the next publish. All four patch keys plus top-level fields verified live 2026-07-11 with content round-trips.
+
+⚠️ Two PATCH gotchas (both verified live 2026-07-11): (1) PATCHing a draft that was created by `flows:consume-template` returns a bare 500 ("Oops... Something broke...") — patch works only on FlowIR-authored drafts; (2) the v1 `PATCH /flows/{flowId}` merge-patch endpoint returns 200 but SILENTLY IGNORES `name`/`description` changes (only `lastModifiedDate` bumps) — never use it for metadata updates.
+
+### Step 7: Observe (after real calls)
+
+Once an entry point routes real calls to the flow: `wxcc-flow interactions FLOW_ID` lists calls (`{"interactions": [], "pageInfo": {...}}` shape), `wxcc-flow traces FLOW_ID VERSION_ID INTERACTION_ID` returns step-by-step execution (add `--decrypt --process-id PID` for decrypted payloads), and `wxcc-flow analytics FLOW_ID VERSION_ID` returns aggregates (fields are `-1` when no data). The Flow Store API cannot place calls — generating an interaction always requires the contact-center side (route an entry point to the flow, dial it).
+
+### Subflows
+
+All of the above works for subflows by adding `flowType=SUBFLOW` as a QUERY param (`--type SUBFLOW` on `create`, `draft`, `save-draft`, `patch`, `export`, `validate --id`, `publish`, `lock`/`unlock`, `revert`, `list`). See § 11 "Subflow Creation via FlowIR Import" for the start/end node shapes and validator quirks.
+
 ## 10. Common Validation Errors
 
 | Code | Message | Fix |
@@ -1435,11 +1456,13 @@ Historically, some activities appeared in the registry metadata but were not ava
 
 If a listed activity behaves this way in the future, the signal is a 400 "Activity not found" from `wxcc-flow choices` on any required Select-type field — check before investing in a full flow.
 
-### Subflow Creation Not Supported via FlowIR Import
+### Subflow Creation via FlowIR Import — REQUIRES the flowType Query Param
 
-The `flowType: "SUBFLOW"` field in FlowIR is ignored by the import endpoint — subflows are always created as `flowType: "FLOW"`. Additionally, `end-subflow` triggers `ACTIVITY_NOT_FOUND` on create, even though it exists in the registry and passes validation. The `end` activity works as a substitute but doesn't have the subflow return-to-caller semantics.
+Subflow creation via FlowIR import WORKS, but only through the `?flowType=SUBFLOW` **query parameter** (`wxcc-flow create file.json --type SUBFLOW`, verified live 2026-07-11 — created, listed under `wxcc-flow list --type SUBFLOW`, exported with `flowType: "SUBFLOW"`, and published). The `flowType: "SUBFLOW"` **body field alone** is ignored — without the query param the import resolves activities against the FLOW registry (so `end-subflow` returns `ACTIVITY_NOT_FOUND`) and creates a `FLOW`. Minimal working subflow: start node `activityName: "start"` / `activityType: "start-subflow"`, end node `activityName: "end-subflow"` / `activityType: "end"`.
 
-**Consequence:** `subflow-handoff` and `fn-activity` cannot be fully round-trip tested via the CLI because they require entity IDs (subflow ID, function ID) that can't be created programmatically. These activities remain "FROM REGISTRY" / "FROM REAL FLOW" in § 7. To validate them, create the subflow/function manually in the UI, then reference the entity ID in FlowIR.
+Two validator quirks (both verified live): dry-run validate (`POST /v2/flows:validate`) has no flowType query param and always validates as FLOW — a valid subflow fails it with ACTIVITY_NOT_FOUND for `end-subflow`; and post-create `wxcc-flow validate --id ID --type SUBFLOW` reports a cosmetic FC1024 on the start node while publish (default `skipValidation=true`) succeeds.
+
+**Consequence (updated 2026-07-11):** subflows CAN now be created programmatically, so `subflow-handoff` is round-trip testable end-to-end (create subflow → publish → reference its ID in `subflowVersion`). `fn-activity` still requires a function ID that can only be created in the UI (there is no Functions API surface in flow-store — the string FUNCTION appears 0 times in the live /v3/api-docs contract).
 
 The `subflowVersion` field of `subflow-handoff` (component type `SubflowVersionSelect`, per the choices 400 error — the flat prod definition does not name component types) does not support the choices API — it returns a 400 error.
 
@@ -1457,6 +1480,14 @@ Some activities have different property names in the activity definition API vs.
 - `queue-contact`: Including `queueRadioGroup` activates "UI mode" validation that requires `destination` + all dual-format fields IN ADDITION TO `queueId`. Omit `queueRadioGroup` entirely to let `queueId` work as a complete shorthand.
 - `percent-allocation`: The activity definition API reports `allocations` as type `string[]` (the PercentAllocation component — the flat prod definition does not name it) with a default of `["{\"percent\":100,\"desc\":\"Allocation Default\"}"]` (an array of stringified JSON objects). The import validator rejects this format — it fails with "Percent allocation values must sum to 100 (current sum: 0.0)". The validator only accepts actual object arrays: `[{"percent":60,"desc":"PathA"},{"percent":40,"desc":"PathB"}]`. Use `object[]` semantics despite the API declaring `string[]`.
 - `set-announcement`: Older definition layers returned TWO inputs named `attributeTag` — feature-flag variants distinguished by `flagName=wxcc_record_agent_personal_greeting` ("Attribute tag", not required, when `flagValue=off,control`; "Greeting Purpose", required, defaultValue="Default", when `flagValue=on`). The live prod registry (2026-07-11) resolves the flag server-side and returns ONE `attributeTag` (required, defaultValue="Default", shown when `toggleAgentGreeting == true`). When `toggleAgentGreeting` is `true`, omitting `attributeTag` fails validation.
+
+### v1 flows:import Is Multipart (Contract Mislabels It)
+
+`POST /{orgId}/project/{projectId}/flows:import` (v1 import of UI-exported flow JSON) is a multipart file-upload endpoint: the live contract's requestBody schema is `{"file": {"type": "string", "format": "binary"}}` even though the content type reads `application/json` (springdoc mislabeling of a MultipartFile param). Sending the JSON as a raw request body returns a bare 500 ("Oops... Something broke..."). Send it as a multipart `file` part instead — `curl -F "file=@export.json;type=application/json"` or `wxcc-flow import-ui export.json`. Success is HTTP 201; a duplicate name with `overwrite=no` is a 409 FLOW_ALREADY_EXISTS. The payload is the verbatim `flows/{id}:export` output (name-only changes allowed; no field stripping needed). Query params `overwrite` (string yes/no) and `Flow Type` (with a space) are optional. Verified live 2026-07-11.
+
+### v1 Merge-Patch Ignores Flow Metadata
+
+`PATCH /{orgId}/project/{projectId}/flows/{flowId}` (application/merge-patch+json) returns 200 but silently ignores `name` and `description` — only `lastModifiedDate` changes (verified live 2026-07-11 with full before/after entity diffs). To rename or re-describe a flow, patch the v2 draft instead (`wxcc-flow update FLOW_ID --name NEW`) and publish; the flow-level name updates on publish.
 
 ### Cascading Choices
 
