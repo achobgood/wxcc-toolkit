@@ -43,6 +43,8 @@ def cmd_list(
                 if len(batch) < _size:
                     break
                 _page += 1
+                if _page > 100000:
+                    break
     except FlowStoreError as e:
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
@@ -54,7 +56,7 @@ def cmd_list(
 
 @app.command("create")
 def create(
-    name: str = typer.Option(..., "--name", help="(required)"),
+    name: str = typer.Option(None, "--name", help=""),
     count: int = typer.Option(None, "--count", help=""),
     json_body: str = typer.Option(None, "--json-body", help="Full JSON body (overrides flags)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
@@ -71,10 +73,10 @@ def create(
             body["name"] = name
         if count is not None:
             body["count"] = count
-        _missing = [k for k in ['name'] if k not in body or body[k] is None]
-        if _missing:
-            typer.echo("Error: Missing required fields: " + ", ".join(_missing), err=True)
-            raise typer.Exit(1)
+    _missing = [k for k in ['name'] if k not in body or body[k] is None]
+    if _missing:
+        typer.echo("Error: Missing required fields: " + ", ".join(_missing), err=True)
+        raise typer.Exit(1)
     _path = f"/{c.org_id}/project/{c.project_id}/widgets"
     try:
         data = c.post(_path, json_body=body, params=params)

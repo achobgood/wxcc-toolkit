@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ast
 import fnmatch
 import json
 import sys
@@ -34,9 +35,15 @@ _OPID_SECTIONS = (
     "skip_endpoints", "blocked_endpoints", "warn_endpoints", "request_overrides",
     "param_cli_names", "pagination", "response_list_keys", "table_columns",
     "command_names", "help_notes", "output_file_option", "body_from_file",
-    "body_fields_override", "body_transform", "exit_code_from",
+    "body_fields_override", "body_transform", "exit_code_from", "body_defaults",
     "param_flag_inversions", "command_type_overrides", "top_level_commands",
+    "extra_commands", "auto_resolve_params",
 )
+
+# Non-opId-keyed top-level sections. Any top-level key not here or in
+# _OPID_SECTIONS is a typo/unknown and fails the lint (so a mistyped section name
+# — e.g. skip_endpoint — can never silently drop its whole payload).
+_OTHER_SECTIONS = {"groups", "auto_inject_from_config", "skip_tags", "keep_endpoints"}
 
 
 def _spec_index(spec: dict) -> tuple[set, dict]:
@@ -61,6 +68,13 @@ def lint_overrides(overrides: dict, spec: dict) -> None:
     (design § 6 lint — machine-kills the wxcli 'silently matches nothing' gotcha)."""
     all_tags, ops = _spec_index(spec)
     errors: list = []
+    # unknown/typo'd top-level section names (design § 6 lint — a mistyped section
+    # would otherwise silently drop its entire payload, e.g. re-exposing skips)
+    recognized = _OTHER_SECTIONS | set(_OPID_SECTIONS)
+    for key in overrides:
+        if key not in recognized:
+            errors.append(f"unknown top-level override section {key!r} "
+                          f"(typo? recognized: {', '.join(sorted(recognized))})")
     # group source tags must exist
     for group, src_tags in (overrides.get("groups") or {}).items():
         for t in src_tags:
@@ -98,6 +112,7 @@ def build_resolver(overrides: dict):
     exit_codes = overrides.get("exit_code_from") or {}
     inversions = overrides.get("param_flag_inversions") or {}
     type_ovr = overrides.get("command_type_overrides") or {}
+    body_defaults = overrides.get("body_defaults") or {}
 
     def resolve(ep):
         oid = ep.operation_id
@@ -138,6 +153,8 @@ def build_resolver(overrides: dict):
             o["param_flag_inversions"] = inversions[oid]
         if oid in type_ovr:
             o["command_type"] = type_ovr[oid]
+        if oid in body_defaults:
+            o["body_defaults"] = body_defaults[oid]
         return o
 
     return resolve
@@ -245,6 +262,12 @@ def emit(groups_data: list, output_dir: Path) -> None:
         eps = [ep for ep, _o in kept]
         ovr_map = {id(ep): o for ep, o in kept}
         code = R.render_group_module(group, eps, lambda ep: ovr_map[id(ep)])
+        try:
+            ast.parse(code)   # fail generation, not the CLI at import, on any collision/syntax error
+        except SyntaxError as e:
+            raise SystemExit(
+                f"Generated module '{group}' is not valid Python (line {e.lineno}: {e.msg}). "
+                f"Likely a parameter-name collision — fix via param_cli_names/command_names in the overrides.")
         (output_dir / f"{_module_name(group)}.py").write_text(code)
         registry.append((_module_name(group), group))
         manifest.extend(rows)
@@ -306,13 +329,23 @@ def main(argv=None) -> int:
             print(f"{g:24s} <- {', '.join(tags)}")
         return 0
 
-    targets = list(groups.keys()) if args.all else ([args.group] if args.group else [])
-    if not targets:
+    if args.all:
+        targets = list(groups.keys())          # --all supersedes --group
+    elif args.group:
+        if args.group not in groups:
+            print(f"Unknown group: {args.group}", file=sys.stderr)
+            return 1
+        if not args.dry_run:
+            # emit() rewrites __init__/_registry/_manifest wholesale, so writing a
+            # single group would orphan the other modules and shrink the package.
+            print("Refusing to emit a single group (would rewrite the package down "
+                  "to one group). Use --all to regenerate, or --dry-run to preview.",
+                  file=sys.stderr)
+            return 1
+        targets = [args.group]
+    else:
         ap.print_help()
         return 0
-    if args.group and args.group not in groups:
-        print(f"Unknown group: {args.group}", file=sys.stderr)
-        return 1
 
     resolve = build_resolver(overrides)
     seen: set = set()

@@ -149,6 +149,14 @@ class TestLint:
         with pytest.raises(SystemExit, match="no-such-controller"):
             G.lint_overrides(ovr, spec)
 
+    def test_unknown_section_key_fails(self, spec):
+        """A mistyped section name (e.g. skip_endpoint) must FAIL — never silently
+        drop its payload (which would re-expose skipped ops)."""
+        ovr = mini_overrides()
+        ovr["skip_endpoint"] = {"refreshWidgets": "typo'd section"}  # singular typo
+        with pytest.raises(SystemExit, match="unknown top-level override section"):
+            G.lint_overrides(ovr, spec)
+
 
 # ── renderer capabilities ────────────────────────────────────────────────────
 
@@ -199,6 +207,26 @@ class TestRenderer:
         eps = {e.operation_id: e for e in P.parse_tag("Widgets", spec, auto_inject={"orgId", "projectId"}, seen=set())}
         merge = eps["mergeWidget"]
         assert merge.request_content_type == "application/merge-patch+json"
+
+    def test_required_body_field_optional_and_validated_both_branches(self, spec):
+        """Fork fix #6: a required body scalar renders as an OPTIONAL flag, and the
+        _missing check sits OUTSIDE the if/else so --json-body is validated too."""
+        code, _k, _r = _render_widgets(spec, mini_overrides())
+        create = "\n".join(l for l in code.splitlines())
+        # name is required in the spec but must render optional (Option(None))
+        assert 'name: str = typer.Option(None, "--name"' in code
+        assert 'typer.Option(..., "--name"' not in code
+        # the _missing guard is at 4-space indent (validates both branches), not 8
+        assert "\n    _missing = [k for k in ['name']" in code
+        assert "\n        _missing = [k for k in ['name']" not in code
+
+    def test_body_defaults_rendered(self, spec):
+        """Fork fix #3: body_defaults seeds the body (via setdefault) for all body
+        types, applied at 4-space so --json-body callers get the default too."""
+        ovr = mini_overrides()
+        ovr["body_defaults"] = {"createWidget": {"kind": "default"}}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert "\n    body.setdefault('kind', 'default')" in code
 
 
 # ── manifest + emission ──────────────────────────────────────────────────────

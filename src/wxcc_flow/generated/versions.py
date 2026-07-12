@@ -44,6 +44,8 @@ def cmd_list(
                 if len(batch) < _size:
                     break
                 _page += 1
+                if _page > 100000:
+                    break
     except FlowStoreError as e:
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
@@ -146,6 +148,8 @@ def cmd_all(
                 if len(batch) < _size:
                     break
                 _page += 1
+                if _page > 100000:
+                    break
     except FlowStoreError as e:
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)

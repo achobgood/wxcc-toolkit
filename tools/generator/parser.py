@@ -83,7 +83,7 @@ def _snake(name: str) -> str:
 
 def _flag(name: str) -> str:
     """Wire name → CLI flag stem (dash-separated), e.g. 'Flow Type' → 'flow-type'."""
-    return _snake(name).replace("_", "-")
+    return (_snake(name) or "arg").replace("_", "-")  # floor: never emit an empty '--' flag
 
 
 def _safe_param_name(name: str) -> str:
@@ -153,6 +153,8 @@ def _merge_all_of(schema: dict, spec: dict) -> dict:
     for item in schema["allOf"]:
         if "$ref" in item:
             item = resolve_ref(spec, item["$ref"])
+        if "allOf" in item:                 # recurse: nested allOf / ref-to-allOf
+            item = _merge_all_of(item, spec)
         merged_props.update(item.get("properties", {}))
         merged_required.extend(item.get("required", []))
     return {"type": "object", "properties": merged_props, "required": merged_required}

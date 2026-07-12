@@ -170,12 +170,16 @@ def _body_option_defs(ep: Endpoint, op_ovr: dict) -> list:
         return ['    body_file: str = typer.Argument(..., help="Path to JSON body file (or - for stdin)"),']
     defs = []
     for f in _body_fields(ep, op_ovr):
-        defs.append(_option_def(f, op_ovr))
+        # Body scalars are ALWAYS optional flags — a complete --json-body must be
+        # able to supply them (design §8). Required-ness is enforced at runtime by
+        # the _missing check (which validates the --json-body path too).
+        defs.append(_option_def(f, op_ovr, required=False))
     defs.append('    json_body: str = typer.Option(None, "--json-body", help="Full JSON body (overrides flags)"),')
     return defs
 
 
 def _body_build(ep: Endpoint, op_ovr: dict) -> list:
+    body_defaults = op_ovr.get("body_defaults") or {}
     if op_ovr.get("body_from_file"):
         lines = [
             '    if body_file == "-":',
@@ -193,17 +197,17 @@ def _body_build(ep: Endpoint, op_ovr: dict) -> list:
     for f in _body_fields(ep, op_ovr):
         if f.required:
             required.append(f.name)
-        if f.field_type == "bool":
-            lines.append(f"        if {f.python_name} is not None:")
-            lines.append(f'            body["{f.name}"] = {f.python_name}')
-        else:
-            lines.append(f"        if {f.python_name} is not None:")
-            lines.append(f'            body["{f.name}"] = {f.python_name}')
+        lines.append(f"        if {f.python_name} is not None:")
+        lines.append(f'            body["{f.name}"] = {f.python_name}')
+    # body_defaults + required check apply to BOTH branches (4-space, after the
+    # if/else) so --json-body callers are seeded and validated too (fork fix #3, #6).
+    for key, val in body_defaults.items():
+        lines.append(f"    body.setdefault({key!r}, {val!r})")
     if required:
-        lines.append(f"        _missing = [k for k in {required!r} if k not in body or body[k] is None]")
-        lines.append("        if _missing:")
-        lines.append('            typer.echo("Error: Missing required fields: " + ", ".join(_missing), err=True)')
-        lines.append("            raise typer.Exit(1)")
+        lines.append(f"    _missing = [k for k in {required!r} if k not in body or body[k] is None]")
+        lines.append("    if _missing:")
+        lines.append('        typer.echo("Error: Missing required fields: " + ", ".join(_missing), err=True)')
+        lines.append("        raise typer.Exit(1)")
     if op_ovr.get("body_transform") == "json-string":
         lines.append("    body = json.dumps(body)")
     return lines
@@ -429,7 +433,9 @@ def _render_list_body(ep: Endpoint, op_ovr: dict, pg: dict | None) -> list:
         "                if len(batch) < _size:",
         "                    break",
         "                _page += 1",
-        *[l.replace("    except", "    except", 1) for l in _error_tail()],
+        "                if _page > 100000:",   # runaway guard: a server that ignores
+        "                    break",            # `size` must not spin forever
+        *_error_tail(),
     ]
 
 
