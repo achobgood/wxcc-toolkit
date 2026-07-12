@@ -1,0 +1,187 @@
+# wxcc-flow generator overrides — every deviation from the Flow Store spec.
+# NEVER hand-edit emitted files. A generated command that needs a tweak means a
+# new entry here (design § 6). The generator lint FAILS if any tag/operationId
+# below is absent from specs/flow-store-api-docs.json.
+#
+# Spec inventory (verified 2026-07-12): 91 ops / 64 paths / 17 tags.
+# Coverage math: 91 = 55 generated + 1 blocked-stub + 22 skip_endpoints
+#                   + 13 skip_tags (admin-flow-controller 12 + prometheus 1).
+# The 2 json-patch ops the spec declares (patchProject, mergePatchFlow) are both
+# skipped/blocked, so the wxcli JSON-Patch auto-detection was safely dropped.
+
+# ── tag → group mapping (design § 5). Multiple source tags may fold into one
+#    group; the util group merges four singleton controllers. ────────────────
+groups:
+  flows: ["Flow", "Flow APIs"]          # Flow APIs = 2 ops already double-tagged onto Flow
+  flows-v2: ["Flow V2"]
+  versions: ["flow-version-controller"]
+  tracing: ["Flow Tracing APIs"]
+  prefs: ["flow-property-controller"]
+  templates: ["Flow Template APIs"]
+  resource-collections: ["Flow Resource Collection APIs"]
+  connectors: ["connector-controller"]
+  projects: ["project-controller"]
+  user-prefs: ["User Preferences"]
+  util: ["expression-test-controller", "buid-info-controller", "health-controller", "auth-controller"]
+
+auto_inject_from_config: ["orgId", "projectId"]
+
+# ── tag-level skips (13 ops): admin RBAC (403 verified) + Prometheus scrape ──
+skip_tags:
+  - "admin-flow-controller"   # 12 internal admin ops — 403 RBAC verified live
+  - "prometheus-controller"   # /metrics Prometheus scrape
+
+# ── op-level skips (22 ops) — the Tier-3 list minus the 13 tag-skips. ────────
+skip_endpoints:
+  auth: "GET /auth — browser-login redirect helper; getCurrentUser (whoami) generates instead"
+  createTemplate: "shared-catalog mutation — creating templates affects every org user"
+  updateTemplate: "shared-catalog mutation"
+  deleteFlowTemplate: "shared-catalog mutation"
+  createProject: "destructive on the system-provisioned project entity"
+  updateProject: "destructive on the system-provisioned project entity"
+  deleteProject: "destructive on the system-provisioned project entity"
+  patchProject: "destructive on the system-provisioned project entity (json-patch)"
+  saveConnector: "Control-Hub-managed; risks breaking live integrations"
+  updateConnector: "Control-Hub-managed; risks breaking live integrations"
+  deleteConnector: "Control-Hub-managed; risks breaking live integrations"
+  saveFlow: "requires generating proprietary v1 Flow JSON (repo hard rule)"
+  updateFlowById: "requires generating proprietary v1 Flow JSON (repo hard rule)"
+  getOrCreateDraft: "v1 draft shape — v2 getDraft covers it"
+  saveDraft_1: "v1 draft shape — v2 saveDraft covers it"
+  exportFlowVersion_2: "trailing-slash duplicate of exportFlowVersion_1"
+  copyFlow_1: "trailing-slash duplicate of copyFlow"
+  removeRoutingStrategyFromFlow: "destructive routing-strategy detach"
+  searchFlows: "exact/case-sensitive only; the list command uses partialNameSearch"
+  createUserPreferences: "clobbers Flow Designer UI state"
+  updateUserPreferences: "clobbers Flow Designer UI state"
+  deleteUserPreferences: "clobbers Flow Designer UI state"
+
+# ── blocked → refusing stub (exit 2, shown in --help). ──────────────────────
+blocked_endpoints:
+  mergePatchFlow: "mergePatchFlow is a verified silent no-op for name/description (200, only lastModifiedDate changes). Use: wxcc-flow update  (or: wxcc-flow api flows-v2 patch-draft)"
+
+# ── warn → real command + stderr banner before the call. ────────────────────
+warn_endpoints:
+  findAllLatestFlowVersions: "500s org-wide when never-published flows exist; fall back to 'api versions all'"
+  dryRunValidate: "always validates as FLOW (no flowType param); a valid SUBFLOW fails with ACTIVITY_NOT_FOUND on end-subflow"
+  validateFlowVersionById: "always validates as FLOW (no flowType param); a valid SUBFLOW fails with ACTIVITY_NOT_FOUND on end-subflow"
+  patchDraft: "500s on consume-template-created drafts; patch FlowIR-authored flows only"
+  consumeFlowFromTemplate: "SUBFLOW templates 404 (feature-flag 'flow-control-draft-templates' gated)"
+
+# ── multipart (design § 2): v1 import — the contract mislabels a binary file
+#    part as application/json; a raw JSON body 500s. ──────────────────────────
+request_overrides:
+  importFlowVersion_1:
+    multipart: true
+
+# ── spaced param → --dash flag (design § 3). The wire name keeps the space. ──
+param_cli_names:
+  importFlowVersion_1:
+    "Flow Type": "flow-type"
+  exportFlowVersion_1:
+    "Flow Type": "flow-type"
+
+# ── page-number pagination — fetch ALL pages by default; --page/--size fetch a
+#    single page (design § 6, capability 6). item_key = response array wrapper. ─
+pagination:
+  findFlows: {page_param: page, size_param: size, item_key: flows}
+  getPublishedFlowVersions: {page_param: page, size_param: size, item_key: versions}
+  getAllFlowVersions: {page_param: page, size_param: size, item_key: versions}
+  findAll_1: {page_param: page, size_param: size, item_key: templates}
+  findAll: {page_param: page, size_param: size, item_key: projects}
+  getInteractions: {page_param: currentPage, size_param: pageSize, item_key: interactions}
+
+# ── item_key for non-paginated list commands rendered with a table. ─────────
+response_list_keys:
+  findAllConnectors: connectors
+
+# ── table columns (also marks the command as a list). ───────────────────────
+table_columns:
+  findFlows: [["ID", "id"], ["Name", "name"], ["Type", "flowType"], ["Status", "status"]]
+  getPublishedFlowVersions: [["Version", "version"], ["Tag", "tag"], ["Published", "publishedDate"]]
+  getAllFlowVersions: [["Flow", "flowId"], ["Version", "version"], ["Tag", "tag"]]
+  findAll_1: [["ID", "id"], ["Name", "name"], ["Type", "flowType"]]
+  findAll: [["ID", "id"], ["Name", "name"]]
+  findAllConnectors: [["ID", "id"], ["Name", "name"]]
+
+# ── curated command names, keyed by operationId (stable — unlike derived names).
+#    Every generated op gets an explicit, unique-within-group name. ───────────
+command_names:
+  # flows
+  findFlowById: get
+  findFlows: list
+  performFlowVariableAutoMapping: variable-mapping
+  checkFlowNameUniqueness: unique-name
+  importFlowVersion_1: import
+  copyFlow: copy
+  consumeFlowFromJson: consume
+  consumeFlowFromTemplate: consume-template
+  unlockFlow: unlock
+  revertFlowVersion: revert
+  publishFlowVersion: publish
+  lockFlow: lock
+  findFlows_1: check
+  exportFlowVersion_1: export
+  getGlobalVariables: global-variables
+  removeFlowById: delete
+  mergePatchFlow: merge-patch
+  # flows-v2
+  dryRunValidate: validate
+  importFlowVersion: import
+  getDraft: get-draft
+  saveDraft: save-draft
+  patchDraft: patch-draft
+  validateFlowVersionById: validate-id
+  exportFlowVersion: export
+  getActivityDefinitions: activities
+  describeActivity: describe
+  getChoicesForInput: choices
+  # versions
+  getPublishedFlowVersions: list
+  getFlowVersionById: get
+  getLatestFlowVersion: latest
+  getLatestFlowDraftVersion: draft
+  getAllFlowVersions: all
+  findAllLatestFlowVersions: all-latest
+  # tracing
+  getInteraction: interaction
+  getTraces: traces
+  getTracesDecrypt: traces-decrypt
+  getAnalytics: analytics
+  getInteractions: interactions
+  # prefs
+  getFlowPreferences: list
+  createFlowPreference: add
+  updateFlowPreferences: set
+  removeFlowPreferencesByPreferenceNames: remove
+  getFlowTags: tags
+  getTagHistories: tag-history
+  # templates
+  findById: get
+  findAll_1: list
+  # resource-collections
+  getResourceCollectionsByUserProfile: list
+  # connectors
+  getConnector: get
+  findAllConnectors: list
+  # projects
+  findProject: get
+  findAll: list
+  # user-prefs
+  getUserPreferences: get
+  # util
+  testExpression: test-expr
+  buildInfo: build-info
+  health: health
+  getCurrentUser: whoami
+
+# ── drift-gate excuse list: the 7 irreducible hand-written commands (design
+#    § 14) have no spec operation; the parity gate counts them as excused. ────
+keep_endpoints:
+  - "configure"     # local: save token + auto-resolve org
+  - "set-project"   # local: set project id
+  - "init"          # local: materialize bundled playbook
+  - "template"      # local: bundled FlowIR starter template
+  - "events"        # synthesis: mines eventsGenerated from the start activity (no event-spec endpoint)
+  - "connectors"    # synthesis: aggregates two choices calls (connector-controller 404s on system project)
+  - "schema"        # synthesis: builds a FlowIR node template client-side (no endpoint returns this)

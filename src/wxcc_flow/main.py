@@ -1133,6 +1133,10 @@ commands_tracing.register(app)
 commands_lifecycle.register(app)
 commands_platform.register(app)
 
+# ── Generated `api <group> <op>` namespace (tools/generator) ─────────
+from wxcc_flow import generated  # noqa: E402
+generated.register(app)  # mounts `wxcc-flow api <group> <op>`
+
 
 def run():
     app()

@@ -116,6 +116,21 @@ class FlowClient:
             if resp.content:
                 typer.echo(f"<<< {resp.text[:500]}", err=True)
 
+    @staticmethod
+    def _result(resp: httpx.Response):
+        """Parse a success body as JSON, tolerating non-JSON bodies.
+
+        Some Flow Store endpoints return plain text on success (e.g. /health,
+        lock/unlock). Guarding json() here prevents the transient traceback class
+        found live 2026-07-12 (unguarded resp.json() on a non-JSON body).
+        """
+        if not resp.content:
+            return {}
+        try:
+            return resp.json()
+        except (ValueError, json.JSONDecodeError):
+            return resp.text
+
     def _handle_error(self, resp: httpx.Response):
         if resp.status_code == 401:
             typer.echo("Error: Authentication failed (401). Token may be expired — regenerate at developer.webex.com.", err=True)
@@ -138,7 +153,7 @@ class FlowClient:
         resp = httpx.get(url, headers=self._headers(), params=params, timeout=30)
         self._log_response(resp)
         self._handle_error(resp)
-        return resp.json() if resp.content else {}
+        return self._result(resp)
 
     def get_safe(self, path: str, params: Optional[dict] = None):
         """GET that returns (data, None) on success or (None, status) on error.
@@ -151,8 +166,7 @@ class FlowClient:
         self._log_response(resp)
         if not resp.is_success:
             return None, resp.status_code
-        data = resp.json() if resp.content else {}
-        return data, None
+        return self._result(resp), None
 
     def post(self, path: str, json_body=None, params: Optional[dict] = None) -> dict:
         url = self._url(path)
@@ -160,7 +174,7 @@ class FlowClient:
         resp = httpx.post(url, headers=self._headers(), json=json_body, params=params, timeout=60)
         self._log_response(resp)
         self._handle_error(resp)
-        return resp.json() if resp.content else {}
+        return self._result(resp)
 
     def put(self, path: str, json_body=None, params: Optional[dict] = None) -> dict:
         url = self._url(path)
@@ -168,7 +182,7 @@ class FlowClient:
         resp = httpx.put(url, headers=self._headers(), json=json_body, params=params, timeout=60)
         self._log_response(resp)
         self._handle_error(resp)
-        return resp.json() if resp.content else {}
+        return self._result(resp)
 
     def patch(self, path: str, json_body=None, params: Optional[dict] = None,
               content_type: str = "application/json") -> dict:
@@ -185,7 +199,7 @@ class FlowClient:
                            params=params, timeout=60)
         self._log_response(resp)
         self._handle_error(resp)
-        return resp.json() if resp.content else {}
+        return self._result(resp)
 
     def post_multipart(self, path: str, filename: str, content: bytes,
                        params: Optional[dict] = None) -> dict:
@@ -203,7 +217,7 @@ class FlowClient:
                           timeout=60)
         self._log_response(resp)
         self._handle_error(resp)
-        return resp.json() if resp.content else {}
+        return self._result(resp)
 
     def delete_with_body(self, path: str, json_body=None) -> dict:
         """DELETE with a JSON body (flow preferences delete takes a name list)."""
@@ -213,15 +227,15 @@ class FlowClient:
                              json=json_body, timeout=30)
         self._log_response(resp)
         self._handle_error(resp)
-        return resp.json() if resp.content else {}
+        return self._result(resp)
 
-    def delete(self, path: str) -> dict:
+    def delete(self, path: str, params: Optional[dict] = None) -> dict:
         url = self._url(path)
         self._log_request("DELETE", url)
-        resp = httpx.delete(url, headers=self._headers(), timeout=30)
+        resp = httpx.delete(url, headers=self._headers(), params=params, timeout=30)
         self._log_response(resp)
         self._handle_error(resp)
-        return resp.json() if resp.content else {}
+        return self._result(resp)
 
     def get_text(self, path: str) -> str:
         """GET that returns raw text (for health endpoint)."""
