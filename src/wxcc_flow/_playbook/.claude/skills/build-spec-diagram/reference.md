@@ -190,6 +190,9 @@ Exit ports per activity type. These determine the rows in the Connections sectio
 | Call Progress Analysis | CPA Successful, Error (auto-handled — no edge) |
 | Receive Message | Timeout, Error (auto-handled — no edge) — BYOC custom messaging; ports from live registry, no success port listed |
 | Send Custom Message | Error (auto-handled — no edge) — BYOC custom messaging; ports from live registry, no success port listed |
+| Cryptographic Hash | Default, Error (auto-handled — no edge) — Default is the implicit `out` port (registry lists only error) |
+| Generate OTP | Default, Error (auto-handled — no edge) — Default is the implicit `out` port (registry lists only error) |
+| Verify OTP | Failure, Resend, Error (auto-handled — no edge) — no success port verified; ports from live registry |
 | Event handlers (all) | Out |
 
 ## XML Templates

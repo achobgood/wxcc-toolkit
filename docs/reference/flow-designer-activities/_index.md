@@ -18,12 +18,14 @@
 | [case.md](case.md) | Case | Branches on a variable's value (switch/case) |
 | [collect-digits.md](collect-digits.md) | Collect Digits | Collects DTMF input for auth, data entry, or navigation |
 | [condition.md](condition.md) | Condition | Evaluates expression, routes to TRUE or FALSE branch |
+| [cryptographic-hash.md](cryptographic-hash.md) | Cryptographic Hash | Generates one-way SHA256/SHA512 hash with optional salt (payload integrity) |
 | [custom-connectors.md](custom-connectors.md) | Custom Connectors | Managed auth for calling third-party APIs from flows |
 | [end-flow.md](end-flow.md) | End Flow | Terminates flow without disconnecting the call |
 | [escalate-cdg.md](escalate-cdg.md) | Escalate Call Distribution Group | Widens agent pool by escalating to next CDG in queue |
 | [feedback-v2.md](feedback-v2.md) | Feedback V2 | Post-call IVR survey (CSAT/NPS) via DTMF |
 | [feedback.md](feedback.md) | Feedback (Legacy) | Legacy survey activity; prefer Feedback V2 |
 | [functions-activity.md](functions-activity.md) | Functions | Executes custom JS or Python code within a flow |
+| [generate-otp.md](generate-otp.md) | Generate OTP | Generates a one-time password for 2FA/MFA; pairs with Verify OTP |
 | [get-queue-info.md](get-queue-info.md) | Get Queue Info | Retrieves EWT and position in queue metrics |
 | [global-event-output-variables.md](global-event-output-variables.md) | Global Event Output Variables | Variables associated with event handlers |
 | [goto.md](goto.md) | GoTo | Transfers call to a different flow or entry point (terminal) |
@@ -50,6 +52,7 @@
 | [set-whisper.md](set-whisper.md) | Set Whisper Announcement | Plays agent-only announcement before connecting caller |
 | [start-media-stream.md](start-media-stream.md) | Start Media Stream | Streams live call audio to a configured media destination |
 | [upload-audio.md](upload-audio.md) | Upload Audio | Uploads audio file (e.g., agent personal greeting) |
+| [verify-otp.md](verify-otp.md) | Verify OTP | Validates a user-provided OTP against the Generate OTP transaction reference |
 | [virtual-agent-legacy.md](virtual-agent-legacy.md) | Virtual Agent (Legacy) | Dialogflow ES integration; prefer Virtual Agent V2 |
 | [virtual-agent-v2.md](virtual-agent-v2.md) | Virtual Agent V2 | Real-time conversational AI within the IVR flow |
 | [wait.md](wait.md) | Wait | Pauses flow execution for a specified duration |

@@ -106,6 +106,9 @@ One row per activity. Exit ports and required config extracted from `docs/refere
 | Outdial Entry Point | Start | (outbound campaign start) | (restricted activity set) | outdial-entry-point.md |
 | Receive Message | Action (BYOC custom messaging) | Timeout, Error | Channel Type, Channel Name, Timeout (UI not documented — beta) | receive-message.md |
 | Send Custom Message | Action (BYOC custom messaging) | Error | Channel Name, Message Type, Message Text (UI not documented — beta) | send-custom-message.md |
+| Cryptographic Hash | Utility | Default (implicit), Error | Plain Text input; Salt (FlowIR validator requires non-empty even when Apply Salt is off) | cryptographic-hash.md |
+| Generate OTP | Utility | Default (implicit), Error | OTP Format, OTP Length, OTP Validity, On-resend action, Transaction Reference | generate-otp.md |
+| Verify OTP | Utility | Failure, Resend, Error | OTP variable, Transaction Reference | verify-otp.md |
 
 ## Variable Naming Conventions
 
@@ -275,6 +278,13 @@ Port names for the design doc Connections table. These match the convention from
 | Custom Connectors | Default | Request completed | Yes |
 | Custom Connectors | Error | System error | No (auto-handled) |
 | Outdial Entry Point | (outbound campaign start) | Restricted context | Yes |
+| Cryptographic Hash | Default | Hash generated (implicit `out` port — registry lists only error) | Yes |
+| Cryptographic Hash | Error | Hash generation failed because of invalid input | No (auto-handled) |
+| Generate OTP | Default | OTP generated (implicit `out` port — registry lists only error) | Yes |
+| Generate OTP | Error | System error (trigger semantics not documented) | No (auto-handled) |
+| Verify OTP | Failure | Verification failed (exact semantics not documented) | Yes |
+| Verify OTP | Resend | Resend requested — loop back to Generate OTP | Yes |
+| Verify OTP | Error | System error (trigger semantics not documented) | No (auto-handled) |
 | Receive Message | Timeout | (from live registry — semantics not documented; BYOC beta) | Yes |
 | Receive Message | Error | (from live registry — semantics not documented; BYOC beta) | Yes |
 | Send Custom Message | Error | (from live registry — semantics not documented; BYOC beta) | Yes |
