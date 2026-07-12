@@ -34,7 +34,7 @@ def validate(
 @app.command("import")
 def cmd_import(
     overwrite: bool = typer.Option(None, "--overwrite/--no-overwrite", help="If true, replaces any existing flow with the same name. Defaults to fa"),
-    flow_type: str = typer.Option(None, "--flow-type", help="Either 'FLOW' or 'SUBFLOW'."),
+    flow_type: str = typer.Option(None, "--type", help="Either 'FLOW' or 'SUBFLOW'."),
     json_body: str = typer.Option(None, "--json-body", help="Full JSON body (overrides flags)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
@@ -62,7 +62,7 @@ def cmd_import(
 @app.command("get-draft")
 def get_draft(
     flow_id: str = typer.Argument(..., help="flowId"),
-    flow_type: str = typer.Option(None, "--flow-type", help="Either 'FLOW' or 'SUBFLOW'."),
+    flow_type: str = typer.Option(None, "--type", help="Either 'FLOW' or 'SUBFLOW'."),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -83,7 +83,7 @@ def get_draft(
 @app.command("save-draft")
 def save_draft(
     flow_id: str = typer.Argument(..., help="flowId"),
-    flow_type: str = typer.Option(None, "--flow-type", help="Either 'FLOW' or 'SUBFLOW'."),
+    flow_type: str = typer.Option(None, "--type", help="Either 'FLOW' or 'SUBFLOW'."),
     expected_version: int = typer.Option(None, "--expected-version", help="Expected flow version for optimistic locking. If the current version d"),
     json_body: str = typer.Option(None, "--json-body", help="Full JSON body (overrides flags)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
@@ -112,7 +112,7 @@ def save_draft(
 @app.command("patch-draft")
 def patch_draft(
     flow_id: str = typer.Argument(..., help="flowId"),
-    flow_type: str = typer.Option(None, "--flow-type", help="Either 'FLOW' or 'SUBFLOW'."),
+    flow_type: str = typer.Option(None, "--type", help="Either 'FLOW' or 'SUBFLOW'."),
     expected_version: int = typer.Option(None, "--expected-version", help="Expected flow version for optimistic locking. If the current version d"),
     json_body: str = typer.Option(None, "--json-body", help="Full JSON body (overrides flags)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
@@ -143,7 +143,7 @@ def patch_draft(
 def validate_id(
     flow_id: str = typer.Argument(..., help="flowId"),
     version_id: str = typer.Option(None, "--version-id", help="Version to validate. Use 'draft' for the current draft, or a specific"),
-    flow_type: str = typer.Option(None, "--flow-type", help="Either 'FLOW' or 'SUBFLOW'."),
+    flow_type: str = typer.Option(None, "--type", help="Either 'FLOW' or 'SUBFLOW'."),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -168,7 +168,7 @@ def validate_id(
 def export(
     flow_id: str = typer.Argument(..., help="flowId"),
     version: str = typer.Option(None, "--version", help="Version to export. Use 'latest' for the most recent published version,"),
-    flow_type: str = typer.Option(None, "--flow-type", help="Either 'FLOW' or 'SUBFLOW'."),
+    flow_type: str = typer.Option(None, "--type", help="Either 'FLOW' or 'SUBFLOW'."),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -190,7 +190,7 @@ def export(
 
 @app.command("activities")
 def activities(
-    flow_type: str = typer.Option(None, "--flow-type", help="Either 'FLOW' or 'SUBFLOW'."),
+    flow_type: str = typer.Option(None, "--type", help="Either 'FLOW' or 'SUBFLOW'."),
     check_ui_enabled: bool = typer.Option(None, "--check-ui-enabled/--no-check-ui-enabled", help="If true, only returns activities marked as UI-enabled."),
     search_by: str = typer.Option(None, "--search-by", help="Filter by activity name substring. Empty returns all."),
     activity_name: str = typer.Option(None, "--activity-name", help="Exact activity-name filter (case-insensitive). When set, the response"),
@@ -220,7 +220,7 @@ def activities(
 @app.command("describe")
 def describe(
     activity_name: str = typer.Argument(..., help="activityName"),
-    flow_type: str = typer.Option(None, "--flow-type", help="Either 'FLOW' or 'SUBFLOW'."),
+    flow_type: str = typer.Option(None, "--type", help="Either 'FLOW' or 'SUBFLOW'."),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -244,7 +244,7 @@ def choices(
     input_name: str = typer.Argument(..., help="inputName"),
     search: str = typer.Option(None, "--search", help="Search text to filter choices. When provided, uses the searchUrl to fi"),
     validate: bool = typer.Option(None, "--validate/--no-validate", help="When true and search is provided, uses validationUrl for point-lookup"),
-    flow_type: str = typer.Option(None, "--flow-type", help="Either 'FLOW' or 'SUBFLOW'."),
+    flow_type: str = typer.Option(None, "--type", help="Either 'FLOW' or 'SUBFLOW'."),
     parent_value: str = typer.Option(None, "--parent-value", help="Parent input value for cascading/dynamic choices (e.g. skill type that"),
     parent_input_name: str = typer.Option(None, "--parent-input-name", help="Parent input name for cascading choices (required when parentValue is"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),

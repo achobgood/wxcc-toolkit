@@ -10,44 +10,7 @@ import json
 import typer
 
 from wxcc_flow.client import FlowClient
-from wxcc_flow.output import print_json, print_table
-
-TEMPLATE_COLUMNS = [
-    ("ID", "id"),
-    ("Name", "name"),
-    ("Type", "flowType"),
-    ("Description", "description"),
-]
-
-
-def templates(
-    name: str = typer.Option(None, "--name", help="Filter by template name"),
-    flow_type: str = typer.Option(None, "--type", help="FLOW or SUBFLOW"),
-    page: int = typer.Option(0, "--page"),
-    size: int = typer.Option(50, "--size"),
-    show_inactive: bool = typer.Option(False, "--show-inactive", help="Include deleted templates"),
-    get_all: bool = typer.Option(False, "--all", help="Ignore feature flags"),
-    output: str = typer.Option("table", "-o", "--output", help="Output format: table|json"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """List the flow/subflow template catalog."""
-    c = FlowClient(debug=debug)
-    params = {"page": page, "size": size}
-    if name:
-        params["name"] = name
-    if flow_type:
-        params["flowType"] = flow_type
-    if show_inactive:
-        params["showInactive"] = "true"
-    if get_all:
-        params["getAll"] = "true"
-    data = c.get("/templates", params=params)
-    items = data if isinstance(data, list) else data.get("templates", data.get("items", []))
-    if output == "json":
-        print_json(data)
-    else:
-        print_table(items, TEMPLATE_COLUMNS, limit=0)
-
+from wxcc_flow.output import print_json
 
 def template_get(
     template_id: str = typer.Argument(..., help="Template ID (see 'wxcc-flow templates')"),
@@ -147,107 +110,9 @@ def import_ui(
     print_json(data)
 
 
-def projects(
-    page: int = typer.Option(0, "--page"),
-    size: int = typer.Option(10, "--size"),
-    output: str = typer.Option("table", "-o", "--output", help="Output format: table|json"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """List the org's Flow Store projects.
-
-    NOTE: the system-provisioned default project may be missing from this
-    list — the configured project ID comes from userPreferences instead
-    (see 'wxcc-flow user-prefs').
-    """
-    c = FlowClient(debug=debug)
-    data = c.get(f"/{c.org_id}/project", params={"page": page, "size": size})
-    items = data if isinstance(data, list) else data.get("projects", data.get("items", []))
-    if output == "json":
-        print_json(data)
-    else:
-        cols = [("ID", "id"), ("Name", "name"), ("Default", "default"),
-                ("Created By", "createdBy"), ("Created", "createdDate")]
-        print_table(items, cols, limit=0)
-
-
-def project(
-    project_id: str = typer.Argument(None, help="Project ID (default: the configured project)"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """Get one project by ID (defaults to the configured project)."""
-    c = FlowClient(debug=debug)
-    pid = project_id or c.project_id
-    data = c.get(f"/{c.org_id}/project/{pid}")
-    print_json(data)
-
-
-def connector_list(
-    output: str = typer.Option("table", "-o", "--output", help="Output format: table|json"),
-    project_id: str = typer.Option(None, "--project-id",
-        help="Project to query. NOTE: the connector-controller 404s on the "
-             "system-provisioned project — pass a user-created project ID "
-             "(see 'wxcc-flow projects')"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """List raw connector entities (connector-controller; 'connectors' shows
-    the choices-based view used by activities)."""
-    c = FlowClient(debug=debug)
-    pid = project_id or c.project_id
-    data = c.get(f"/{c.org_id}/project/{pid}/connector")
-    items = data if isinstance(data, list) else data.get("connectors", data.get("items", []))
-    if output == "json":
-        print_json(data)
-    else:
-        cols = [("ID", "id"), ("Name", "name"), ("Type", "type")]
-        print_table(items, cols, limit=0)
-
-
-def connector(
-    connector_id: str = typer.Argument(..., help="Connector ID"),
-    project_id: str = typer.Option(None, "--project-id",
-        help="Project to query (connector-controller 404s on the "
-             "system-provisioned project — pass a user-created project ID)"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """Get one connector entity by ID."""
-    c = FlowClient(debug=debug)
-    pid = project_id or c.project_id
-    data = c.get(f"/{c.org_id}/project/{pid}/connector/{connector_id}")
-    print_json(data)
-
-
-def resource_collections(
-    page: int = typer.Option(0, "--page"),
-    size: int = typer.Option(10, "--size"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """List resource collections visible to the current user."""
-    c = FlowClient(debug=debug)
-    data = c.get(f"/{c.org_id}/resource-collections",
-                 params={"page": page, "size": size})
-    print_json(data)
-
-
-def user_prefs(
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """Show the current user's Flow Designer preferences (incl. the real
-    project ID used for auto-resolution)."""
-    c = FlowClient(debug=debug)
-    data = c.get(f"/{c.org_id}/userPreferences")
-    print_json(data)
-
-
 def register(app: typer.Typer) -> None:
-    app.command()(templates)
     app.command("template-get")(template_get)
     app.command("consume-template")(consume_template)
     app.command()(consume)
     app.command("export-ui")(export_ui)
     app.command("import-ui")(import_ui)
-    app.command()(projects)
-    app.command()(project)
-    app.command("connector-list")(connector_list)
-    app.command()(connector)
-    app.command("resource-collections")(resource_collections)
-    app.command("user-prefs")(user_prefs)

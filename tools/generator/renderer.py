@@ -44,18 +44,27 @@ def _py_type(field_type: str) -> str:
     return {"int": "int", "float": "float", "bool": "bool"}.get(field_type, "str")
 
 
-def _url_expr(ep: Endpoint) -> str:
+def _url_expr(ep: Endpoint, op_ovr: dict | None = None) -> str:
     """Spec-literal path f-string body: {orgId}→{c.org_id}, {projectId}→
     {c.project_id}, other {param}→{snake}.
 
     orgId/projectId are substituted UNCONDITIONALLY by their literal path token —
     the spec is inconsistent about declaring them as path parameters (some ops
     omit projectId), so relying on the declared-param set left {projectId}
-    unbound → NameError (caught by the Phase A read-only sweep)."""
+    unbound → NameError (caught by the Phase A read-only sweep).
+
+    expose_path_param (design polish): an auto-injected orgId/projectId can be
+    exposed as an optional CLI override — the URL then reads a `_org_id`/
+    `_project_id` local (declared in the body as `<flag> or c.<attr>`) so e.g.
+    `connector-list --project-id <user-project>` can reach a project the
+    connector-controller actually serves (the system project 404s)."""
     from .parser import _safe_param_name
+    exposed = {p.lower() for p in (op_ovr or {}).get("expose_path_param") or []}
+    org_token = "{_org_id}" if "orgid" in exposed else "{c.org_id}"
+    proj_token = "{_project_id}" if "projectid" in exposed else "{c.project_id}"
     expr = ep.url_path
-    expr = re.sub(r"\{[oO]rg[iI]d\}", "{c.org_id}", expr)
-    expr = re.sub(r"\{[pP]roject[iI]d\}", "{c.project_id}", expr)
+    expr = re.sub(r"\{[oO]rg[iI]d\}", org_token, expr)
+    expr = re.sub(r"\{[pP]roject[iI]d\}", proj_token, expr)
     for var in ep.path_vars:
         if var.lower() in ("orgid", "projectid"):
             continue
@@ -84,6 +93,63 @@ def _path_arg_defs(ep: Endpoint) -> list:
             continue
         defs.append(f'    {_safe_param_name(var)}: str = typer.Argument(..., help="{_esc(var)}"),')
     return defs
+
+
+def _expose_path_defs(op_ovr: dict) -> list:
+    """Signature Options for exposed auto-injected path params (--project-id/--org-id)."""
+    defs = []
+    for p in op_ovr.get("expose_path_param") or []:
+        pl = p.lower()
+        if pl == "projectid":
+            defs.append('    project_id: str = typer.Option(None, "--project-id", '
+                        'help="Project ID to target (default: the configured project)"),')
+        elif pl == "orgid":
+            defs.append('    org_id: str = typer.Option(None, "--org-id", '
+                        'help="Org ID to target (default: the configured org)"),')
+    return defs
+
+
+def _expose_path_lines(op_ovr: dict) -> list:
+    """Body locals resolving each exposed path param to its override-or-config value."""
+    lines = []
+    for p in op_ovr.get("expose_path_param") or []:
+        pl = p.lower()
+        if pl == "projectid":
+            lines.append("    _project_id = project_id or c.project_id")
+        elif pl == "orgid":
+            lines.append("    _org_id = org_id or c.org_id")
+    return lines
+
+
+def _promoted_arg_defs(ep: Endpoint, op_ovr: dict) -> list:
+    """promote_to_argument: render named query params as positional Arguments
+    (the verb's subject reads better positionally than behind a required flag —
+    e.g. `revert FLOW VERSION` not `revert FLOW --version-id VERSION`). Still
+    sent as query params in the request."""
+    by_name = {qp.name: qp for qp in ep.query_params}
+    defs = []
+    for name in op_ovr.get("promote_to_argument") or []:
+        qp = by_name.get(name)
+        if qp is None:
+            continue
+        defs.append(f'    {qp.python_name}: {_py_type(qp.field_type)} = '
+                    f'typer.Argument(..., help="{_esc(qp.description or name)}"),')
+    return defs
+
+
+def _promoted_query_lines(ep: Endpoint, op_ovr: dict) -> list:
+    """params-dict lines for promoted args (always sent — they are required)."""
+    by_name = {qp.name: qp for qp in ep.query_params}
+    lines = []
+    for name in op_ovr.get("promote_to_argument") or []:
+        qp = by_name.get(name)
+        if qp is None:
+            continue
+        if qp.field_type == "bool":
+            lines.append(f'    params["{qp.name}"] = str({qp.python_name}).lower()')
+        else:
+            lines.append(f'    params["{qp.name}"] = {qp.python_name}')
+    return lines
 
 
 def _cli_flag_for(f: EndpointField, op_ovr: dict) -> str:
@@ -242,7 +308,20 @@ def _emit_output(op_ovr: dict, var: str, listy: bool, columns_repr: str) -> list
             f"        print_json({var})",
         ]
     else:
-        lines.append(f"    print_json({var})")
+        # success_echo: many mutations (lock/unlock/delete) return a trivial ack —
+        # an empty body (→ bare `null`) or a bare `"OK"` string. Neither is useful
+        # output, so print the friendly confirmation for those; a STRUCTURED body
+        # (dict/list, e.g. revert's version list) is real data and still prints.
+        se = op_ovr.get("success_echo")
+        if se:
+            lines += [
+                f"    if {var} and not isinstance({var}, str):",
+                f"        print_json({var})",
+                "    else:",
+                f'        typer.echo(f"{se}")',
+            ]
+        else:
+            lines.append(f"    print_json({var})")
     if ecf:
         key = ecf["json_key"]
         cond = f'{var}.get("{key}")'
@@ -259,7 +338,7 @@ def _emit_output(op_ovr: dict, var: str, listy: bool, columns_repr: str) -> list
 
 def _http_call(ep: Endpoint, op_ovr: dict, into: str = "data") -> list:
     """Emit the try/except HTTP call for non-list command types."""
-    path_line = f'    _path = f"{_url_expr(ep)}"'
+    path_line = f'    _path = f"{_url_expr(ep, op_ovr)}"'
     ct = op_ovr.get("content_type") or ep.request_content_type or "application/json"
     if op_ovr.get("multipart"):
         return [path_line,
@@ -331,7 +410,10 @@ def render_command(ep: Endpoint, op_ovr: dict) -> str:
              or op_ovr.get("command_type") == "list")
     pg = op_ovr.get("pagination")
     inv = op_ovr.get("param_flag_inversions") or {}
-    exclude = _pagination_excludes(op_ovr) | _inversion_excludes(op_ovr)
+    # promoted query params become positional Arguments; exclude them from the
+    # normal Option loop + _query_build (they get their own signature + params lines).
+    exclude = (_pagination_excludes(op_ovr) | _inversion_excludes(op_ovr)
+               | set(op_ovr.get("promote_to_argument") or []))
 
     # A delete's spec `force` query param would collide with the confirmation
     # --force flag (duplicate function arg) — rename it to --server-force.
@@ -344,12 +426,14 @@ def render_command(ep: Endpoint, op_ovr: dict) -> str:
     # ---- signature ----
     params: list = []
     params += _path_arg_defs(ep)
+    params += _promoted_arg_defs(ep, op_ovr)   # positional subjects (after path args)
     if op_ovr.get("multipart"):
         params.append('    file: str = typer.Argument(..., help="Path to the JSON file to upload"),')
     for qp in ep.query_params:
         if qp.name in exclude:
             continue
         params.append(_option_def(qp, op_ovr))
+    params += _expose_path_defs(op_ovr)         # --project-id / --org-id overrides
     for wire, spec in inv.items():
         cli = spec["cli_name"]
         params.append(f'    {cli.replace("-", "_")}: bool = typer.Option(None, "--{cli}/--no-{cli}", help="Sets {wire}"),')
@@ -376,8 +460,10 @@ def render_command(ep: Endpoint, op_ovr: dict) -> str:
         else:
             lines += ["    if not force:", '        typer.confirm("Delete this resource?", abort=True)']
     lines.append("    c = FlowClient(debug=debug)")
+    lines += _expose_path_lines(op_ovr)         # _project_id = project_id or c.project_id
     lines.append("    params = {}")
     lines += _auto_inject_query_lines(ep)
+    lines += _promoted_query_lines(ep, op_ovr)  # always-sent positional subjects
     lines += _query_build(ep, op_ovr, exclude)
     for wire, spec in inv.items():
         cli_py = spec["cli_name"].replace("-", "_")
@@ -405,7 +491,7 @@ def _render_list_body(ep: Endpoint, op_ovr: dict, pg: dict | None) -> list:
     key = op_ovr.get("item_key") or (pg or {}).get("item_key") or ep.response_list_key or "items"
     extract = (f'data if isinstance(data, list) else '
                f'data.get("{key}", data.get("items", data.get("data", [])))')
-    path_line = f'    _path = f"{_url_expr(ep)}"'
+    path_line = f'    _path = f"{_url_expr(ep, op_ovr)}"'
     if not pg:
         return [path_line, "    try:", "        data = c.get(_path, params=params)", *_error_tail(),
                 f"    items = {extract}"]

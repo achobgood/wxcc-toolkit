@@ -50,7 +50,7 @@ def cmd_list(
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
     if output == "table":
-        print_table(items, columns=[('Version', 'version'), ('Tag', 'tag'), ('Published', 'publishedDate')], limit=0)
+        print_table(items, columns=[('Version ID', 'id'), ('Version', 'version'), ('Tag', 'tag'), ('Published', 'publishedDate'), ('Created By', 'createdBy')], limit=0)
     else:
         print_json(items)
 

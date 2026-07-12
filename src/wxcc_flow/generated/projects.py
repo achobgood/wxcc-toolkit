@@ -10,13 +10,15 @@ app = typer.Typer(help="Flow Store projects operations (generated).", no_args_is
 
 @app.command("get")
 def get(
+    project_id: str = typer.Option(None, "--project-id", help="Project ID to target (default: the configured project)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """findProject. [operationId: findProject]"""
     c = FlowClient(debug=debug)
+    _project_id = project_id or c.project_id
     params = {}
-    _path = f"/{c.org_id}/project/{c.project_id}"
+    _path = f"/{c.org_id}/project/{_project_id}"
     try:
         data = c.get(_path, params=params)
     except FlowStoreError as e:
@@ -63,6 +65,6 @@ def cmd_list(
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
     if output == "table":
-        print_table(items, columns=[('ID', 'id'), ('Name', 'name')], limit=0)
+        print_table(items, columns=[('ID', 'id'), ('Name', 'name'), ('Default', 'default'), ('Created By', 'createdBy')], limit=0)
     else:
         print_json(items)

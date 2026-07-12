@@ -12,7 +12,7 @@ app = typer.Typer(help="Flow Store flows operations (generated).", no_args_is_he
 def get(
     flow_id: str = typer.Argument(..., help="flowId"),
     view: str = typer.Option(None, "--view", help=""),
-    flow_type: str = typer.Option(None, "--flow-type", help=""),
+    flow_type: str = typer.Option(None, "--type", help=""),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -46,7 +46,7 @@ def delete(
     flow_id: str = typer.Argument(..., help="flowId"),
     server_force: str = typer.Option(None, "--server-force", help=""),
     skip_rs_ep_check: bool = typer.Option(None, "--skip-rs-ep-check/--no-skip-rs-ep-check", help=""),
-    flow_type: str = typer.Option(None, "--flow-type", help=""),
+    flow_type: str = typer.Option(None, "--type", help=""),
     force: bool = typer.Option(False, "--force", help="Skip the confirmation prompt"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
@@ -68,12 +68,15 @@ def delete(
     except FlowStoreError as e:
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
-    print_json(data)
+    if data and not isinstance(data, str):
+        print_json(data)
+    else:
+        typer.echo(f"Deleted flow {flow_id}")
 
 
 @app.command("list")
 def cmd_list(
-    flow_type: str = typer.Option(None, "--flow-type", help="Either of 'FLOW' or 'SUBFLOW'."),
+    flow_type: str = typer.Option(None, "--type", help="Either of 'FLOW' or 'SUBFLOW'."),
     ids: str = typer.Option(None, "--ids", help="Filters results based on a comma-separated list of flow IDs. If provid"),
     partial_name_search: str = typer.Option(None, "--partial-name-search", help="Performs a partial string match on the name of the flow. If the flow n"),
     include_pagination: bool = typer.Option(None, "--include-pagination/--no-include-pagination", help="If set to to true then a different paginated response object containin"),
@@ -131,8 +134,8 @@ def cmd_list(
 
 @app.command("variable-mapping")
 def variable_mapping(
-    current_flow_id: str = typer.Option(..., "--current-flow-id", help="(required)"),
-    hand_off_flow_id: str = typer.Option(..., "--hand-off-flow-id", help="(required)"),
+    current_flow_id: str = typer.Argument(..., help="currentFlowId"),
+    hand_off_flow_id: str = typer.Argument(..., help="handOffFlowId"),
     hand_off_tag_id: str = typer.Option(None, "--hand-off-tag-id", help=""),
     hand_off_variable_source: str = typer.Option(None, "--hand-off-variable-source", help=""),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
@@ -142,10 +145,8 @@ def variable_mapping(
     c = FlowClient(debug=debug)
     params = {}
     params["orgId"] = c.org_id
-    if current_flow_id is not None:
-        params["currentFlowId"] = current_flow_id
-    if hand_off_flow_id is not None:
-        params["handOffFlowId"] = hand_off_flow_id
+    params["currentFlowId"] = current_flow_id
+    params["handOffFlowId"] = hand_off_flow_id
     if hand_off_tag_id is not None:
         params["handOffTagId"] = hand_off_tag_id
     if hand_off_variable_source is not None:
@@ -162,7 +163,7 @@ def variable_mapping(
 @app.command("unique-name")
 def unique_name(
     flow_name: str = typer.Option(..., "--flow-name", help="(required)"),
-    flow_type: str = typer.Option(None, "--flow-type", help=""),
+    flow_type: str = typer.Option(None, "--type", help=""),
     flow_id: str = typer.Option(None, "--flow-id", help=""),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
@@ -189,7 +190,7 @@ def unique_name(
 def cmd_import(
     file: str = typer.Argument(..., help="Path to the JSON file to upload"),
     overwrite: str = typer.Option(None, "--overwrite", help="Determines whether to overwrite the existing flow or not. Possible val"),
-    flow_type: str = typer.Option(None, "--flow-type", help="Either of 'FLOW' or 'SUBFLOW'."),
+    flow_type: str = typer.Option(None, "--type", help="Either of 'FLOW' or 'SUBFLOW'."),
     associated_rcs: str = typer.Option(None, "--associated-rcs", help=""),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
@@ -217,7 +218,7 @@ def cmd_import(
 
 @app.command("copy")
 def copy(
-    source_flow_id: str = typer.Option(..., "--source-flow-id", help="(required)"),
+    source_flow_id: str = typer.Argument(..., help="sourceFlowId"),
     associated_rcs: str = typer.Option(None, "--associated-rcs", help=""),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
@@ -225,8 +226,7 @@ def copy(
     """copyFlow. [operationId: copyFlow]"""
     c = FlowClient(debug=debug)
     params = {}
-    if source_flow_id is not None:
-        params["sourceFlowId"] = source_flow_id
+    params["sourceFlowId"] = source_flow_id
     if associated_rcs is not None:
         params["associatedRcs"] = associated_rcs
     _path = f"/{c.org_id}/project/{c.project_id}/flows:copy"
@@ -241,7 +241,7 @@ def copy(
 @app.command("consume")
 def consume(
     overwrite: bool = typer.Option(None, "--overwrite/--no-overwrite", help="Determines whether to overwrite any existing flow/subflow or not. Poss"),
-    flow_type: str = typer.Option(None, "--flow-type", help="Either of 'FLOW' or 'SUBFLOW'"),
+    flow_type: str = typer.Option(None, "--type", help="Either of 'FLOW' or 'SUBFLOW'"),
     template_name: str = typer.Option(None, "--template-name", help="Name of the Template"),
     json_body: str = typer.Option(None, "--json-body", help="Full JSON body (overrides flags)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
@@ -272,7 +272,7 @@ def consume(
 @app.command("consume-template")
 def consume_template(
     overwrite: bool = typer.Option(None, "--overwrite/--no-overwrite", help="Determines whether to overwrite any existing flow/subflow or not. Poss"),
-    flow_type: str = typer.Option(None, "--flow-type", help="Either of 'FLOW' or 'SUBFLOW'"),
+    flow_type: str = typer.Option(None, "--type", help="Either of 'FLOW' or 'SUBFLOW'"),
     template_name: str = typer.Option(..., "--template-name", help="(required)The name of the Flow/Subflow Template to be used."),
     flow_name: str = typer.Option(..., "--flow-name", help="(required)Name of the Flow to be created/overwritten"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
@@ -302,7 +302,7 @@ def consume_template(
 @app.command("unlock")
 def unlock(
     flow_id: str = typer.Argument(..., help="flowId"),
-    flow_type: str = typer.Option(None, "--flow-type", help=""),
+    flow_type: str = typer.Option(None, "--type", help=""),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -317,22 +317,24 @@ def unlock(
     except FlowStoreError as e:
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
-    print_json(data)
+    if data and not isinstance(data, str):
+        print_json(data)
+    else:
+        typer.echo(f"Unlocked flow {flow_id}")
 
 
 @app.command("revert")
 def revert(
     flow_id: str = typer.Argument(..., help="flowId"),
-    version_id: str = typer.Option(..., "--version-id", help="(required)"),
-    flow_type: str = typer.Option(None, "--flow-type", help=""),
+    version_id: str = typer.Argument(..., help="versionId"),
+    flow_type: str = typer.Option(None, "--type", help=""),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """revertFlowVersion. [operationId: revertFlowVersion]"""
     c = FlowClient(debug=debug)
     params = {}
-    if version_id is not None:
-        params["versionId"] = version_id
+    params["versionId"] = version_id
     if flow_type is not None:
         params["flowType"] = flow_type
     _path = f"/{c.org_id}/project/{c.project_id}/flows/{flow_id}:revert"
@@ -341,14 +343,17 @@ def revert(
     except FlowStoreError as e:
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
-    print_json(data)
+    if data and not isinstance(data, str):
+        print_json(data)
+    else:
+        typer.echo(f"Reverted flow {flow_id} to version {version_id}")
 
 
 @app.command("publish")
 def publish(
     flow_id: str = typer.Argument(..., help="flowId"),
     skip_validation: bool = typer.Option(None, "--skip-validation/--no-skip-validation", help="Skip validation of the flow before publishing."),
-    flow_type: str = typer.Option(None, "--flow-type", help=""),
+    flow_type: str = typer.Option(None, "--type", help=""),
     json_body: str = typer.Option(None, "--json-body", help="Full JSON body (overrides flags)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
@@ -376,7 +381,7 @@ def publish(
 @app.command("lock")
 def lock(
     flow_id: str = typer.Argument(..., help="flowId"),
-    flow_type: str = typer.Option(None, "--flow-type", help=""),
+    flow_type: str = typer.Option(None, "--type", help=""),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -391,7 +396,10 @@ def lock(
     except FlowStoreError as e:
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
-    print_json(data)
+    if data and not isinstance(data, str):
+        print_json(data)
+    else:
+        typer.echo(f"Locked flow {flow_id}")
 
 
 @app.command("check")
@@ -404,7 +412,7 @@ def check(
     global_var: str = typer.Option(None, "--global-var", help=""),
     search: str = typer.Option(None, "--search", help=""),
     business_hour: str = typer.Option(None, "--business-hour", help=""),
-    flow_type: str = typer.Option(None, "--flow-type", help=""),
+    flow_type: str = typer.Option(None, "--type", help=""),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -442,7 +450,7 @@ def check(
 def export(
     flow_id: str = typer.Argument(..., help="flowId"),
     version: str = typer.Option(None, "--version", help="Version ID. Possible values are 'draft', 'latest' or version ID like '"),
-    flow_type: str = typer.Option(None, "--flow-type", help="Either of 'FLOW' or 'SUBFLOW'."),
+    flow_type: str = typer.Option(None, "--type", help="Either of 'FLOW' or 'SUBFLOW'."),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):

@@ -168,18 +168,6 @@ def _get_all_flows(c: FlowClient, extra_params: Optional[dict] = None) -> list:
 
 
 @app.command()
-def get(
-    flow_id: str = typer.Argument(..., help="Flow ID"),
-    output: str = typer.Option("json", "-o", "--output"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """Get flow metadata."""
-    c = _client(debug)
-    data = c.get(c.v1_flow(flow_id))
-    print_json(data)
-
-
-@app.command()
 def search(
     query: str = typer.Argument(..., help="Search query"),
     output: str = typer.Option("table", "-o", "--output"),
@@ -334,71 +322,6 @@ def publish(
     typer.echo(f"Published flow {flow_id}")
     if data:
         print_json(data)
-
-
-@app.command()
-def lock(
-    flow_id: str = typer.Argument(..., help="Flow ID"),
-    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """Lock a flow for editing."""
-    c = _client(debug)
-    c.post(f"{c.v1_flow(flow_id)}:lock", params={"flowType": flow_type})
-    typer.echo(f"Locked flow {flow_id}")
-
-
-@app.command()
-def unlock(
-    flow_id: str = typer.Argument(..., help="Flow ID"),
-    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """Unlock a flow."""
-    c = _client(debug)
-    c.post(f"{c.v1_flow(flow_id)}:unlock", params={"flowType": flow_type})
-    typer.echo(f"Unlocked flow {flow_id}")
-
-
-@app.command()
-def copy(
-    flow_id: str = typer.Argument(..., help="Flow ID to copy"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """Copy an existing flow."""
-    c = _client(debug)
-    data = c.post(f"{c.v1_flows()}:copy", json_body={}, params={"sourceFlowId": flow_id})
-    typer.echo(f"Copied flow {flow_id}")
-    print_json(data)
-
-
-@app.command()
-def delete(
-    flow_id: str = typer.Argument(..., help="Flow ID"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """Delete a flow."""
-    c = _client(debug)
-    c.delete(c.v1_flow(flow_id))
-    typer.echo(f"Deleted flow {flow_id}")
-
-
-@app.command()
-def versions(
-    flow_id: str = typer.Argument(..., help="Flow ID"),
-    output: str = typer.Option("table", "-o", "--output"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """List published versions of a flow."""
-    c = _client(debug)
-    data = c.get(f"{c.v1_flow(flow_id)}/versions")
-    vlist = data if isinstance(data, list) else data.get("versions", data.get("items", []))
-    cols = [("Version ID", "id"), ("Version", "version"),
-            ("Created", "createdDate"), ("Created By", "createdBy")]
-    if output == "json":
-        print_json(vlist)
-    else:
-        print_table(vlist, cols)
 
 
 def _find_activity_safe(client: FlowClient, name: str, flow_type: str = "FLOW"):

@@ -127,7 +127,7 @@ def interactions(
     sort_order: str = typer.Option(None, "--sort-order", help="sortOrder for the response, asc or desc"),
     page: int = typer.Option(None, "--page", help="Fetch a single 0-based page. Omit to fetch all pages."),
     size: int = typer.Option(None, "--size", help="Page size (default 100 when fetching all)."),
-    output: str = typer.Option("json", "-o", "--output", help="Output format: table|json"),
+    output: str = typer.Option("table", "-o", "--output", help="Output format: table|json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Get all interactions of a flow across its versions. [operationId: getInteractions]"""
@@ -177,6 +177,6 @@ def interactions(
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
     if output == "table":
-        print_table(items, columns=[("ID", "id"), ("Name", "name")], limit=0)
+        print_table(items, columns=[('Interaction ID', 'interactionId'), ('Version', 'flowVersionId'), ('ANI', 'ani'), ('DNIS', 'dnis'), ('Start', 'startTime'), ('End', 'endTime')], limit=0)
     else:
         print_json(items)

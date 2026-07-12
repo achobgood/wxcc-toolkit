@@ -74,12 +74,13 @@ request_overrides:
   importFlowVersion_1:
     multipart: true
 
-# ── spaced param → --dash flag (design § 3). The wire name keeps the space. ──
-param_cli_names:
-  importFlowVersion_1:
-    "Flow Type": "flow-type"
-  exportFlowVersion_1:
-    "Flow Type": "flow-type"
+# ── global flag renames (applied to EVERY op; a per-op param_cli_names entry
+#    wins on a conflicting wire name). Preserves the documented `--type` flag
+#    (CLAUDE.md ships `--type SUBFLOW` on ~16 commands) instead of the derived
+#    `--flow-type`, and gives the v1 spaced param "Flow Type" the same flag. ──
+global_param_cli_names:
+  flowType: "type"
+  "Flow Type": "type"
 
 # ── page-number pagination — fetch ALL pages by default; --page/--size fetch a
 #    single page (design § 6, capability 6). item_key = response array wrapper. ─
@@ -95,14 +96,47 @@ pagination:
 response_list_keys:
   findAllConnectors: connectors
 
-# ── table columns (also marks the command as a list). ───────────────────────
+# ── table columns (also marks the command as a list). Columns use only field
+#    accessors verified live in Phase A (api sweep) or Phase 3 (hand commands). ─
 table_columns:
   findFlows: [["ID", "id"], ["Name", "name"], ["Type", "flowType"], ["Status", "status"]]
-  getPublishedFlowVersions: [["Version", "version"], ["Tag", "tag"], ["Published", "publishedDate"]]
+  # Version ID (ObjectId) MUST lead — it is what `revert FLOW VERSION` / `version get`
+  # consume; dropping it from the default table breaks the find-then-revert workflow.
+  getPublishedFlowVersions: [["Version ID", "id"], ["Version", "version"], ["Tag", "tag"], ["Published", "publishedDate"], ["Created By", "createdBy"]]
   getAllFlowVersions: [["Flow", "flowId"], ["Version", "version"], ["Tag", "tag"]]
-  findAll_1: [["ID", "id"], ["Name", "name"], ["Type", "flowType"]]
-  findAll: [["ID", "id"], ["Name", "name"]]
-  findAllConnectors: [["ID", "id"], ["Name", "name"]]
+  findAll_1: [["ID", "id"], ["Name", "name"], ["Type", "flowType"], ["Description", "description"]]
+  findAll: [["ID", "id"], ["Name", "name"], ["Default", "default"], ["Created By", "createdBy"]]
+  findAllConnectors: [["ID", "id"], ["Name", "name"], ["Type", "type"]]
+  getInteractions: [["Interaction ID", "interactionId"], ["Version", "flowVersionId"], ["ANI", "ani"], ["DNIS", "dnis"], ["Start", "startTime"], ["End", "endTime"]]
+
+# ── success_echo (Phase-B polish): these ops return an EMPTY body, so a raw
+#    print_json prints a bare `null`. Print the friendly confirmation instead
+#    (the body is still printed if the server ever returns one). Placeholders
+#    reference the emitted argument names. ──────────────────────────────────────
+success_echo:
+  lockFlow: "Locked flow {flow_id}"
+  unlockFlow: "Unlocked flow {flow_id}"
+  removeFlowById: "Deleted flow {flow_id}"
+  revertFlowVersion: "Reverted flow {flow_id} to version {version_id}"
+
+# ── promote_to_argument (Phase-B polish): the verb's SUBJECT reads better as a
+#    positional argument than behind a required flag — `revert FLOW VERSION`,
+#    `copy SOURCE`, `variable-mapping CURRENT HANDOFF`. Still sent as query
+#    params on the wire. ────────────────────────────────────────────────────────
+promote_to_argument:
+  copyFlow: ["sourceFlowId"]
+  revertFlowVersion: ["versionId"]
+  performFlowVariableAutoMapping: ["currentFlowId", "handOffFlowId"]
+
+# ── expose_path_param (Phase-B polish): the connector-controller 404s on the
+#    system-provisioned project, so the auto-injected projectId must be
+#    overridable — `connector-list --project-id <user-project>`. ────────────────
+expose_path_param:
+  findAllConnectors: ["projectId"]
+  getConnector: ["projectId"]
+  # restore the hand `project [ID]` capability (query any project, not just the
+  # configured one) as an overridable --project-id.
+  findProject: ["projectId"]
 
 # ── curated command names, keyed by operationId (stable — unlike derived names).
 #    Every generated op gets an explicit, unique-within-group name. ───────────
@@ -174,6 +208,40 @@ command_names:
   buildInfo: build-info
   health: health
   getCurrentUser: whoami
+
+# ── top-level promotions (design § 5) — Phase B wave 1. Each generated command
+#    is ALSO registered at the root app under its documented porcelain name; the
+#    hand-written command of that name MUST be deleted (register() raises on a
+#    live collision). Key = operationId, value = root command name. ────────────
+top_level_commands:
+  # Group 1 — read-only, print_json, output already identical to hand
+  findFlowById: get
+  getFlowPreferences: prefs
+  getFlowTags: tags
+  getTagHistories: tag-history
+  getUserPreferences: user-prefs
+  getResourceCollectionsByUserProfile: resource-collections
+  # NOTE: `health` intentionally NOT promoted — the hand command bundles /health
+  # AND /build_info (2 calls); the generated single-op `util health` drops
+  # build-info. Deferred to Phase C (split health + build-info, or keep the bundle).
+  getInteraction: interaction
+  getAnalytics: analytics
+  findProject: project
+  # Group 2 — read-only lists with curated domain columns
+  getPublishedFlowVersions: versions
+  findAll_1: templates
+  findAll: projects
+  getInteractions: interactions
+  # Group 3 — mutations (success_echo / promote_to_argument polish applied)
+  lockFlow: lock
+  unlockFlow: unlock
+  removeFlowById: delete
+  copyFlow: copy
+  revertFlowVersion: revert
+  performFlowVariableAutoMapping: variable-mapping
+  # Connectors — with the --project-id override so they can reach a user project
+  findAllConnectors: connector-list
+  getConnector: connector
 
 # ── drift-gate excuse list: the 7 irreducible hand-written commands (design
 #    § 14) have no spec operation; the parity gate counts them as excused. ────

@@ -45,21 +45,6 @@ def patch(
         print_json(data)
 
 
-def revert(
-    flow_id: str = typer.Argument(..., help="Flow ID"),
-    version_id: str = typer.Argument(..., help="Version ID to revert to (see 'wxcc-flow versions')"),
-    flow_type: str = typer.Option("FLOW", "--type", help="FLOW or SUBFLOW"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """Revert a flow to a previous published version."""
-    c = FlowClient(debug=debug)
-    data = c.post(f"{c.v1_flow(flow_id)}:revert",
-                  params={"versionId": version_id, "flowType": flow_type})
-    typer.echo(f"Reverted flow {flow_id} to version {version_id}")
-    if data:
-        print_json(data)
-
-
 def unique_name(
     name: str = typer.Argument(..., help="Flow name to check"),
     flow_id: str = typer.Option(None, "--flow-id", help="Exclude this flow ID (for renames)"),
@@ -138,43 +123,6 @@ def update(
                f"(publish to propagate to the flow level)")
     if data:
         print_json(data)
-
-
-def tags(
-    flow_id: str = typer.Argument(..., help="Flow ID"),
-    all_tags: bool = typer.Option(False, "--all", help="Return all eligible tags, not just attached ones"),
-    tag_id: str = typer.Option(None, "--tag-id", help="One of 'Live', 'Latest', 'Test', 'Dev' (must be in use)"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """List the version tags of a flow (Live/Latest/Test/Dev)."""
-    c = FlowClient(debug=debug)
-    params = {}
-    if all_tags:
-        params["all"] = "true"
-    if tag_id:
-        params["tagId"] = tag_id
-    data = c.get(f"{c.v1_flow(flow_id)}/tags", params=params or None)
-    print_json(data)
-
-
-def tag_history(
-    flow_id: str = typer.Argument(..., help="Flow ID"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """Show which flow versions each tag has pointed to over time."""
-    c = FlowClient(debug=debug)
-    data = c.get(f"{c.v1_flow(flow_id)}/tagHistories")
-    print_json(data)
-
-
-def prefs(
-    flow_id: str = typer.Argument(..., help="Flow ID"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """List a flow's preferences (autoSave, viewSettings, ...)."""
-    c = FlowClient(debug=debug)
-    data = c.get(f"{c.v1_flow(flow_id)}/preferences")
-    print_json(data)
 
 
 def prefs_set(
@@ -282,39 +230,13 @@ def all_versions(
         print_table(items, cols, limit=0)
 
 
-def variable_mapping(
-    current_flow_id: str = typer.Argument(..., help="Current flow ID"),
-    handoff_flow_id: str = typer.Argument(..., help="Hand-off (GoTo target) flow ID"),
-    tag_id: str = typer.Option(None, "--tag-id", help="Hand-off tag ID"),
-    source: str = typer.Option(None, "--source", help="Hand-off variable source"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """Auto-map variables between a flow and its hand-off (GoTo) flow."""
-    c = FlowClient(debug=debug)
-    # Contract quirk: orgId is BOTH a path segment and a required query param
-    # on this operation — send both.
-    params = {"orgId": c.org_id, "currentFlowId": current_flow_id,
-              "handOffFlowId": handoff_flow_id}
-    if tag_id:
-        params["handOffTagId"] = tag_id
-    if source:
-        params["handOffVariableSource"] = source
-    data = c.post(f"{c.v1_flows()}:variable-mapping", params=params)
-    print_json(data)
-
-
 def register(app: typer.Typer) -> None:
     app.command()(patch)
-    app.command()(revert)
     app.command("unique-name")(unique_name)
     app.command()(version)
     app.command()(update)
-    app.command()(tags)
-    app.command("tag-history")(tag_history)
-    app.command()(prefs)
     app.command("prefs-set")(prefs_set)
     app.command("prefs-add")(prefs_add)
     app.command("prefs-rm")(prefs_rm)
     app.command()(check)
     app.command("all-versions")(all_versions)
-    app.command("variable-mapping")(variable_mapping)

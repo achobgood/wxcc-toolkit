@@ -11,13 +11,15 @@ app = typer.Typer(help="Flow Store connectors operations (generated).", no_args_
 @app.command("get")
 def get(
     connector_id: str = typer.Argument(..., help="connectorId"),
+    project_id: str = typer.Option(None, "--project-id", help="Project ID to target (default: the configured project)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """getConnector. [operationId: getConnector]"""
     c = FlowClient(debug=debug)
+    _project_id = project_id or c.project_id
     params = {}
-    _path = f"/{c.org_id}/project/{c.project_id}/connector/{connector_id}"
+    _path = f"/{c.org_id}/project/{_project_id}/connector/{connector_id}"
     try:
         data = c.get(_path, params=params)
     except FlowStoreError as e:
@@ -28,13 +30,15 @@ def get(
 
 @app.command("list")
 def cmd_list(
+    project_id: str = typer.Option(None, "--project-id", help="Project ID to target (default: the configured project)"),
     output: str = typer.Option("table", "-o", "--output", help="Output format: table|json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """findAllConnectors. [operationId: findAllConnectors]"""
     c = FlowClient(debug=debug)
+    _project_id = project_id or c.project_id
     params = {}
-    _path = f"/{c.org_id}/project/{c.project_id}/connector"
+    _path = f"/{c.org_id}/project/{_project_id}/connector"
     try:
         data = c.get(_path, params=params)
     except FlowStoreError as e:
@@ -42,6 +46,6 @@ def cmd_list(
         raise typer.Exit(1)
     items = data if isinstance(data, list) else data.get("connectors", data.get("items", data.get("data", [])))
     if output == "table":
-        print_table(items, columns=[('ID', 'id'), ('Name', 'name')], limit=0)
+        print_table(items, columns=[('ID', 'id'), ('Name', 'name'), ('Type', 'type')], limit=0)
     else:
         print_json(items)

@@ -32,7 +32,7 @@ def get(
 @app.command("list")
 def cmd_list(
     name: str = typer.Option(None, "--name", help="Template Name. Example: Business Hours Template"),
-    flow_type: str = typer.Option(None, "--flow-type", help="Template type - FLOW or SUBFLOW"),
+    flow_type: str = typer.Option(None, "--type", help="Template type - FLOW or SUBFLOW"),
     show_inactive: bool = typer.Option(None, "--show-inactive/--no-show-inactive", help="Whether to show deleted flows or not"),
     get_all: bool = typer.Option(None, "--get-all/--no-get-all", help="Whether to show all templates, regardless of feature flag"),
     page: int = typer.Option(None, "--page", help="Fetch a single 0-based page. Omit to fetch all pages."),
@@ -79,6 +79,6 @@ def cmd_list(
         typer.echo(f"Error {e.status_code}: {e.body}", err=True)
         raise typer.Exit(1)
     if output == "table":
-        print_table(items, columns=[('ID', 'id'), ('Name', 'name'), ('Type', 'flowType')], limit=0)
+        print_table(items, columns=[('ID', 'id'), ('Name', 'name'), ('Type', 'flowType'), ('Description', 'description')], limit=0)
     else:
         print_json(items)

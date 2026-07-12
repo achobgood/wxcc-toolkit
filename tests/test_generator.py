@@ -237,7 +237,7 @@ class TestManifest:
         G.lint_overrides(ovr, spec)
         resolve = G.build_resolver(ovr)
         kept, rows = G.build_group("widgets", ["Widgets"], spec, ovr, resolve, set())
-        G.emit([("widgets", kept, rows)], tmp_path)
+        G.emit([("widgets", kept, rows)], tmp_path, [])
         assert (tmp_path / "widgets.py").exists()
         assert (tmp_path / "__init__.py").exists()
         assert (tmp_path / "_registry.py").exists()
@@ -259,3 +259,132 @@ class TestManifest:
         assert (out / "widgets.py").exists()
         for f in out.glob("*.py"):
             ast.parse(f.read_text())
+
+
+# ── Phase-B polish features (2026-07-12 "full polish") ───────────────────────
+
+class TestPhaseBFeatures:
+    def test_global_param_cli_names(self, spec):
+        """flowType/'Flow Type' → --type everywhere via global_param_cli_names."""
+        ovr = mini_overrides()
+        ovr.pop("param_cli_names", None)                       # let global handle it
+        ovr["global_param_cli_names"] = {"Flow Type": "type"}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert '"--type"' in code
+        ast.parse(code)
+
+    def test_per_op_cli_name_wins_over_global(self, spec):
+        """A per-op param_cli_names entry beats the global on a conflicting wire name."""
+        ovr = mini_overrides()
+        ovr["global_param_cli_names"] = {"Flow Type": "type"}
+        ovr["param_cli_names"] = {"importWidget": {"Flow Type": "zzz"}}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert '"--zzz"' in code and '"--type"' not in code
+
+    def test_success_echo(self, spec):
+        """Empty-body mutation prints a friendly confirmation, not a bare null."""
+        ovr = mini_overrides()
+        ovr["success_echo"] = {"deleteWidget": "Deleted {widget_id}"}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert "if data and not isinstance(data, str):" in code
+        assert 'typer.echo(f"Deleted {widget_id}")' in code
+        ast.parse(code)
+
+    def test_promote_to_argument(self, spec):
+        """A named query param becomes a positional Argument + is still sent."""
+        ovr = mini_overrides()
+        ovr["promote_to_argument"] = {"findWidgets": ["kind"]}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert "kind: str = typer.Argument(" in code
+        assert 'params["kind"] = kind' in code
+        assert '"--kind"' not in code                          # no longer an Option
+        ast.parse(code)
+
+    def test_expose_path_param(self, spec):
+        """An auto-injected projectId is exposed as an optional --project-id override."""
+        ovr = mini_overrides()
+        ovr["expose_path_param"] = {"getWidget": ["projectId"]}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert 'project_id: str = typer.Option(None, "--project-id"' in code
+        assert "_project_id = project_id or c.project_id" in code
+        assert "project/{_project_id}/" in code                # URL reads the override
+        ast.parse(code)
+
+
+# ── top-level promotions (design § 5) ────────────────────────────────────────
+
+class TestPromotions:
+    def _groups_data(self, spec, ovr):
+        G.lint_overrides(ovr, spec)
+        resolve = G.build_resolver(ovr)
+        kept, rows = G.build_group("widgets", ["Widgets"], spec, ovr, resolve, set())
+        return [("widgets", kept, rows)]
+
+    def test_build_promotions_maps_opid_to_command(self, spec):
+        ovr = mini_overrides()
+        ovr["top_level_commands"] = {"getWidget": "get", "findWidgets": "list"}
+        promos = G._build_promotions(ovr, self._groups_data(spec, ovr))
+        assert ("widgets", "get", "get") in promos
+        assert ("widgets", "list", "list") in promos
+
+    def test_promote_blocked_op_fails(self, spec):
+        ovr = mini_overrides()
+        ovr["top_level_commands"] = {"mergeWidget": "merge-patch"}   # blocked stub
+        with pytest.raises(SystemExit, match="blocked"):
+            G._build_promotions(ovr, self._groups_data(spec, ovr))
+
+    def test_promote_skipped_op_fails(self, spec):
+        ovr = mini_overrides()
+        ovr["top_level_commands"] = {"purgeWidgets": "purge"}        # admin skip_tag
+        with pytest.raises(SystemExit, match="skipped or absent"):
+            G._build_promotions(ovr, self._groups_data(spec, ovr))
+
+    def test_promote_duplicate_name_fails(self, spec):
+        ovr = mini_overrides()
+        ovr["top_level_commands"] = {"getWidget": "x", "findWidgets": "x"}
+        with pytest.raises(SystemExit, match="promoted twice"):
+            G._build_promotions(ovr, self._groups_data(spec, ovr))
+
+    def test_render_init_emits_promotion_scaffold(self):
+        code = G._render_init(["widgets"], [("widgets", "get", "get")])
+        assert "from typer.main import get_command_name" in code
+        assert '_PROMOTIONS = [' in code
+        assert '("widgets", "get", "get"),' in code
+        assert "RuntimeError(" in code
+        assert "app.command(top_name)(ci.callback)" in code
+        ast.parse(code)
+
+    def test_manifest_annotates_top_level(self, spec, tmp_path):
+        ovr = mini_overrides()
+        ovr["top_level_commands"] = {"getWidget": "get"}
+        gd = self._groups_data(spec, ovr)
+        promos = G._build_promotions(ovr, gd)
+        G.emit(gd, tmp_path, promos)
+        manifest = json.loads((tmp_path / "_manifest.json").read_text())
+        by_cmd = {m["command"]: m for m in manifest}
+        assert by_cmd["get"].get("top_level") == "get"
+        assert "top_level" not in by_cmd["create"]              # unpromoted stays clean
+
+
+class TestPromotionRuntime:
+    """The generated package's register() guard, against the real 21 promotions."""
+
+    def test_collision_raises_when_hand_command_present(self):
+        import typer
+        from wxcc_flow import generated
+        app = typer.Typer()
+
+        @app.command()
+        def get():   # a still-present hand command named 'get'
+            ...
+        with pytest.raises(RuntimeError, match="collides"):
+            generated.register(app)
+
+    def test_register_promotes_when_clean(self):
+        import typer
+        from wxcc_flow import generated
+        app = typer.Typer()
+        generated.register(app)
+        names = {(c.name or c.callback.__name__).replace("_", "-")
+                 for c in app.registered_commands}
+        assert {"get", "lock", "delete", "revert", "connector-list"} <= names

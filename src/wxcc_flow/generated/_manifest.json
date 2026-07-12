@@ -9,7 +9,8 @@
     "required_params": [
       "<flowId>"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "get"
   },
   {
     "group": "flows",
@@ -33,7 +34,8 @@
     "required_params": [
       "<flowId>"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "delete"
   },
   {
     "group": "flows",
@@ -56,7 +58,8 @@
       "currentFlowId",
       "handOffFlowId"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "variable-mapping"
   },
   {
     "group": "flows",
@@ -92,7 +95,8 @@
     "required_params": [
       "sourceFlowId"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "copy"
   },
   {
     "group": "flows",
@@ -127,7 +131,8 @@
     "required_params": [
       "<flowId>"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "unlock"
   },
   {
     "group": "flows",
@@ -140,7 +145,8 @@
       "<flowId>",
       "versionId"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "revert"
   },
   {
     "group": "flows",
@@ -164,7 +170,8 @@
     "required_params": [
       "<flowId>"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "lock"
   },
   {
     "group": "flows",
@@ -323,7 +330,8 @@
     "required_params": [
       "<flowId>"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "versions"
   },
   {
     "group": "versions",
@@ -394,7 +402,8 @@
       "<versionId>",
       "<interactionId>"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "interaction"
   },
   {
     "group": "tracing",
@@ -436,7 +445,8 @@
       "<flowId>",
       "<versionId>"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "analytics"
   },
   {
     "group": "tracing",
@@ -448,7 +458,8 @@
     "required_params": [
       "<flowId>"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "interactions"
   },
   {
     "group": "prefs",
@@ -460,7 +471,8 @@
     "required_params": [
       "<flowId>"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "prefs"
   },
   {
     "group": "prefs",
@@ -508,7 +520,8 @@
     "required_params": [
       "<flowId>"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "tags"
   },
   {
     "group": "prefs",
@@ -520,7 +533,8 @@
     "required_params": [
       "<flowId>"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "tag-history"
   },
   {
     "group": "templates",
@@ -542,7 +556,8 @@
     "path": "/templates",
     "read_only": true,
     "required_params": [],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "templates"
   },
   {
     "group": "resource-collections",
@@ -552,7 +567,8 @@
     "path": "/{orgId}/resource-collections",
     "read_only": true,
     "required_params": [],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "resource-collections"
   },
   {
     "group": "connectors",
@@ -564,7 +580,8 @@
     "required_params": [
       "<connectorId>"
     ],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "connector"
   },
   {
     "group": "connectors",
@@ -574,7 +591,8 @@
     "path": "/{orgId}/project/{projectId}/connector",
     "read_only": true,
     "required_params": [],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "connector-list"
   },
   {
     "group": "projects",
@@ -584,7 +602,8 @@
     "path": "/{orgId}/project/{projectId}",
     "read_only": true,
     "required_params": [],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "project"
   },
   {
     "group": "projects",
@@ -594,7 +613,8 @@
     "path": "/{orgId}/project",
     "read_only": true,
     "required_params": [],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "projects"
   },
   {
     "group": "user-prefs",
@@ -604,7 +624,8 @@
     "path": "/{orgId}/userPreferences",
     "read_only": true,
     "required_params": [],
-    "status": "generated"
+    "status": "generated",
+    "top_level": "user-prefs"
   },
   {
     "group": "util",
