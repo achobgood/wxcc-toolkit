@@ -99,6 +99,30 @@ Then run `/wxcc-agent-builder` to build an agent, or `/wxcc-debug` to troublesho
 a failing action. The builder walks you through everything — from database setup
 through a working AI agent handling calls.
 
+## Using with OpenAI Codex CLI
+
+The playbook ships both assistant profiles side by side. `wxcc-flow init`
+writes Claude Code files (`CLAUDE.md`, `.claude/`) and Codex files
+(`AGENTS.md`, `.codex/`, `.agents/skills/`) into the same folder — use
+`--claude-only` or `--codex-only` to restrict it:
+
+    pip install wxcc-toolkit
+    wxcc-flow init my-wxcc-project
+    cd my-wxcc-project
+    codex
+
+Trust the folder when Codex prompts — the shipped `.codex/config.toml`
+(approval policy, sandbox mode, MCP servers) only takes effect in a trusted
+folder. `AGENTS.md` and the skills under `.agents/skills/` load automatically;
+the CLI command reference lives in `.codex/docs/cli-commands.md`. Configure
+the API token the same way as for Claude Code:
+
+    wxcc-flow configure
+
+The Codex profile is generated from the Claude profile at build time — the
+two never drift. Codex has no per-command allowlist, so expect an approval
+prompt when a command needs to run outside the workspace sandbox.
+
 ## Update an existing project folder
 
 After upgrading the package (`pip install --upgrade wxcc-toolkit`), refresh a
