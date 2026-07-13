@@ -21,17 +21,26 @@ This installs two console commands (aliases of the same CLI): `wxcc-toolkit` and
 wxcc-toolkit init my-wxcc-project
 ```
 
-This materializes the playbook into `my-wxcc-project/`:
+This materializes **both** the Claude Code and Codex CLI profiles into
+`my-wxcc-project/` by default (pass `--claude-only` or `--codex-only` to
+install just one — see "Using with OpenAI Codex CLI" below):
 
 ```
 my-wxcc-project/
 ├── CLAUDE.md                  # project instructions Claude Code loads at session start
-├── .mcp.json                  # MCP server config (optional — see "Configure MCP servers" below)
+├── AGENTS.md                  # project instructions Codex CLI loads
+├── .mcp.json                  # Claude MCP server config (optional — see "Configure MCP servers" below)
 ├── .claude/
 │   ├── settings.json          # pre-approved Skills, MCP tools, and wxcc-flow CLI
 │   ├── agents/                # the wxcc-agent-builder agent
 │   ├── skills/                # 14 build/design skills
 │   └── rules/                 # platform-accuracy doc-lookup rules
+├── .codex/
+│   ├── config.toml            # approval policy, sandbox mode, MCP servers
+│   ├── agents/                # per-agent Codex config
+│   └── docs/                  # CLI command reference, doc-lookup rules
+├── .agents/
+│   └── skills/                # the same 14 skills, in Codex's skill format
 └── docs/
     ├── reference/             # platform knowledge (Flow Designer, Connect, AI Agent Studio, …)
     ├── playbooks/             # step-by-step platform guides
@@ -39,10 +48,11 @@ my-wxcc-project/
     └── examples/              # working FlowIR / config examples
 ```
 
-`init` writes a manifest (`.claude/.wxcc-manifest.json`) recording every file it
-owns. It never overwrites files you create. If the target folder already contains
-files the playbook would overwrite, `init` stops and lists them — re-run with
-`--force` to overwrite, or pick an empty folder.
+`init` writes a manifest per installed profile (`.claude/.wxcc-manifest.json`
+and/or `.codex/.wxcc-manifest.json`) recording every file it owns. It never
+overwrites files you create. If the target folder already contains files the
+playbook would overwrite, `init` stops and lists them — re-run with `--force`
+to overwrite, or pick an empty folder.
 
 ## Configure the `wxcc-flow` CLI (recommended)
 

@@ -2,6 +2,14 @@
 
 All notable changes to **wxcc-toolkit** are documented here.
 
+## 0.3.3 — 2026-07-13
+
+### Fixed
+- **README** `init` directory tree was written before the Codex CLI port and only
+  showed the Claude Code output. `wxcc-toolkit init` has installed both profiles
+  by default since 0.3.0 — the tree now shows `AGENTS.md`, `.codex/`, and
+  `.agents/skills/` alongside the Claude files, and says so explicitly.
+
 ## 0.3.2 — 2026-07-13
 
 Repository hygiene only — no changes to the shipped package, CLI, or playbook
