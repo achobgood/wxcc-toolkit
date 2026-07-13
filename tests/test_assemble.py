@@ -158,3 +158,42 @@ def test_audit_exempts_rules_frontmatter_but_not_body(tmp_path):
     got = A.audit_bundle(bundle)
     assert (".claude/rules/x.md", 6, "tools/") in got                 # body still audited
     assert not any(ln == 3 for _, ln, _ in got)                       # frontmatter glob exempt
+
+
+# ── Codex transform: phrase map ──────────────────────────────────────────
+
+def test_phrase_map_rewrites_prose_slash_commands_not_paths():
+    A = _load_assemble()
+    out = A.apply_phrase_map(
+        "Run `/wxcc-agent-builder` to start. Run `/wxcc-debug` to debug.\n"
+        "| `.claude/skills/wxcc-debug/` | Skill: debug failing actions |\n"
+    )
+    assert "/wxcc-agent-builder" not in out
+    assert "wxcc-agent-builder** agent" in out
+    assert ".agents/skills/wxcc-debug/" in out          # path segment survived intact
+    assert "the `wxcc-debug` skill" in out
+
+
+def test_phrase_map_path_swaps_most_specific_first():
+    A = _load_assemble()
+    out = A.apply_phrase_map(
+        ".claude/agents/wxcc-agent-builder.md and .claude/settings.json "
+        "and .claude/rules/bre-questions.md and .claude/anythingelse"
+    )
+    assert ".codex/agents/wxcc-agent-builder.toml" in out
+    assert ".codex/config.toml" in out
+    assert ".codex/docs/rules/bre-questions.md" in out
+    assert ".codex/anythingelse" in out                  # generic catch-all last
+    assert ".claude/" not in out
+
+
+def test_phrase_map_tool_isms():
+    A = _load_assemble()
+    out = A.apply_phrase_map(
+        "use SendMessage to continue; YOU MUST call Skill(build-action); "
+        "Claude Code loads CLAUDE.md"
+    )
+    assert "SendMessage" not in out
+    assert "Skill(build-action)" not in out
+    assert "the `build-action` skill" in out
+    assert "Codex loads AGENTS.md" in out

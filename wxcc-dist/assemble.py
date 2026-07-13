@@ -13,6 +13,7 @@ repo-only token fails the run.
 """
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -46,6 +47,57 @@ EXCLUDE_BASENAMES = {".DS_Store"}
 # documents the installed CLI. All tokens below are 0-hit today and stand as
 # regression guards.
 AUDIT_TOKENS = ("/Users/", "venv/", ".worktrees", ".superpowers", "node_modules/", "tools/")
+
+# ── Codex playbook transform ──────────────────────────────────────────────
+# The Codex shape (.codex/ + .agents/skills/ + AGENTS.md) is GENERATED from
+# the assembled Claude bundle; canonical .claude/ is never touched.
+CODEX_OVERLAY = DIST_DIR / "codex"
+GROUNDING_MARKER = "NEVER answer questions about any Cisco platform from training data"
+_EFFORT = {"opus": "high", "sonnet": "medium", "haiku": "low"}
+
+# Ordered Claude→Codex rewrite pipeline (Codex copies of .md files ONLY).
+# /wxcc-agent-builder and /wxcc-debug are ALSO path segments
+# (.agents/skills/wxcc-debug/), so they use a negative lookbehind (?<!\w) —
+# paths always have a word char before the slash; a naive str.replace would
+# corrupt those paths AND slip past the audit. Order: guarded slash-command
+# regexes → tool-name literals → path swaps most-specific-first.
+CODEX_PIPELINE = [
+    ("re", re.compile(r"(?<!\w)/wxcc-agent-builder\b"), "the **wxcc-agent-builder** agent"),
+    ("re", re.compile(r"(?<!\w)/wxcc-debug\b"), "the `wxcc-debug` skill"),
+    ("re", re.compile(r"Skill\(([a-z][a-z-]*)\)"), r"the `\1` skill"),
+    ("lit", "`SendMessage`", "a follow-up instruction"),
+    ("lit", "SendMessage", "a follow-up instruction"),
+    ("lit", "Claude Code", "Codex"),
+    ("lit", "CLAUDE.md", "AGENTS.md"),
+    ("lit", ".claude/agents/wxcc-agent-builder.md", ".codex/agents/wxcc-agent-builder.toml"),
+    ("lit", ".claude/settings.local.json", ".codex/config.toml"),
+    ("lit", ".claude/settings.json", ".codex/config.toml"),
+    ("lit", ".claude/skills", ".agents/skills"),
+    ("lit", ".claude/rules", ".codex/docs/rules"),
+    ("lit", ".claude/", ".codex/"),   # generic path prefix — always last
+]
+
+# Residual Claude-isms that must NOT survive into the Codex outputs. Slash
+# patterns carry the SAME path-guard so `.agents/skills/wxcc-debug/` never
+# false-positives. Keep this list paired with CODEX_PIPELINE: every new
+# pipeline rule gets a forbidden pattern here where applicable.
+CODEX_FORBIDDEN = [
+    re.compile(r"SendMessage"),
+    re.compile(r"Claude Code"),
+    re.compile(r"CLAUDE\.md"),
+    re.compile(r"\.claude/"),
+    re.compile(r"(?<!\w)/wxcc-agent-builder\b"),
+    re.compile(r"(?<!\w)/wxcc-debug\b"),
+    re.compile(r"Skill\([a-z][a-z-]*\)"),
+]
+
+
+def apply_phrase_map(text: str) -> str:
+    """Rewrite Claude-specific invocation phrasing for the Codex copy. Slash-command
+    rules never touch path segments (negative lookbehind on a word char)."""
+    for kind, a, b in CODEX_PIPELINE:
+        text = a.sub(b, text) if kind == "re" else text.replace(a, b)
+    return text
 
 
 def enumerate_sources(repo_root: Path) -> list[str]:
