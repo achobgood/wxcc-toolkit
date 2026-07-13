@@ -196,12 +196,16 @@ def init(
         typer.echo("Re-run with --force to overwrite them, or choose an empty folder.", err=True)
         raise typer.Exit(1)
 
-    # Refreshing already-installed profiles touches only owned files; confirm unless
-    # --force/--yes.
-    if existing and not (force or yes) and not typer.confirm(
-        f"Refresh the wxcc-toolkit playbook ({', '.join(existing)}) in {folder} (owned files only)?"
-    ):
-        raise typer.Exit(0)
+    # Refreshing already-installed profiles touches only owned files; adding a fresh
+    # profile alongside is additive. Confirm unless --force/--yes.
+    if existing and not (force or yes):
+        actions = [f"refresh {', '.join(existing)}"]
+        if fresh:
+            actions.append(f"add {', '.join(fresh)}")
+        if not typer.confirm(
+            f"This will {' and '.join(actions)} in {folder} (owned files only). Continue?"
+        ):
+            raise typer.Exit(0)
 
     folder.mkdir(parents=True, exist_ok=True)
     written = deleted = 0

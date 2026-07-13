@@ -185,7 +185,10 @@ def build_agents_md(claude_md: str) -> tuple[str, dict[str, str]]:
 
 def _split_frontmatter(md: str) -> tuple[dict[str, str], str]:
     """Return (scalar-frontmatter dict, body). Handles `key: value` and `key: |`
-    block scalars; ignores list keys (tools/skills)."""
+    block scalars. YAML list-item lines (starting with `-`) are skipped as
+    continuation; any other single-line `key: value` is stored (including
+    comma-joined scalars like `tools: Read, Edit`). Only name/model/description
+    are read downstream."""
     if not md.startswith("---\n"):
         raise ValueError("agent file missing frontmatter")
     end = md.index("\n---\n", 4)
@@ -259,7 +262,7 @@ def _mcp_servers_toml(curated_mcp: Path) -> str:
             out.append(f'command = {q(cfg["command"])}')
             out.append(f'args = [{", ".join(q(a) for a in cfg.get("args", []))}]')
             if cfg.get("env"):
-                pairs = ", ".join(f"{k} = {q(v)}" for k, v in cfg["env"].items())
+                pairs = ", ".join(f"{q(k)} = {q(v)}" for k, v in cfg["env"].items())
                 out.append(f"env = {{ {pairs} }}")
         elif "url" in cfg:
             out.append(f'url = {q(cfg["url"])}')

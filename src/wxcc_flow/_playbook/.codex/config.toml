@@ -26,7 +26,7 @@ sandbox_mode = "workspace-write"
 [mcp_servers.supabase]
 command = "npx"
 args = ["-y", "@supabase/mcp-server-supabase@latest", "--project-ref", "YOUR_SUPABASE_PROJECT_REF"]
-env = { SUPABASE_ACCESS_TOKEN = "YOUR_SUPABASE_ACCESS_TOKEN" }
+env = { "SUPABASE_ACCESS_TOKEN" = "YOUR_SUPABASE_ACCESS_TOKEN" }
 
 [mcp_servers.wxcc-flow-builder]
 url = "https://flow-store.produs1.ciscoccservice.com/flow-store/mcp"
