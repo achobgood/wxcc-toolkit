@@ -2,6 +2,30 @@
 
 All notable changes to **wxcc-toolkit** are documented here.
 
+## 0.3.0 — 2026-07-13
+
+Adds an OpenAI Codex CLI profile alongside the existing Claude Code playbook, so
+`wxcc-toolkit` now drives both assistants from one source of truth.
+
+### Added
+- **Codex CLI profile**, generated from the canonical Claude playbook: `AGENTS.md`,
+  `.codex/` (config, per-agent TOML, doc rules), and `.agents/skills/`. The Claude
+  experience is byte-for-byte unchanged.
+- **`wxcc-flow init` installs both profiles by default** — `--claude-only` /
+  `--codex-only` restrict it; per-profile manifests and ref-counted uninstall.
+- **Smart refresh**: a plain `wxcc-flow init <folder> --force` refreshes only the
+  profiles already installed in that folder (a fresh folder still gets both; add
+  the other profile with its explicit flag).
+- **Codex MCP env-backed auth**: the generated `.codex/config.toml` Flow Store
+  server uses `bearer_token_env_var = "WXCC_FLOW_TOKEN"` — no token is written into
+  a project file (it reuses the same env var the CLI already reads).
+- **Pull-request CI** (`.github/workflows/ci.yml`): playbook freshness, offline
+  tests, drift gate, wheel build, and an installed-wheel smoke test on every PR.
+
+### Fixed
+- `wxcc-flow init` no longer silently overwrites a user's own file when adding a
+  second profile to an existing folder (collision guard covers incremental adoption).
+
 ## 0.2.0 — 2026-07-12
 
 Major expansion of the `wxcc-flow` Flow Designer CLI, plus a full verification

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wxcc-toolkit"
-version = "0.2.0"
+version = "0.3.0"
 description = "WxCC AI Agent Builder Toolkit — a Claude Code playbook (agent, skills, rules, docs) plus the wxcc-flow Flow Designer CLI, delivered via pip"
 readme = "README.md"
 license = "Apache-2.0"
