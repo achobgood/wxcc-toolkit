@@ -206,3 +206,18 @@ def test_refresh_one_profile_leaves_other_untouched(bundle, tmp_path):
     before = marker.read_bytes()
     assert _init(str(folder), "--claude-only", "--force").exit_code == 0
     assert marker.read_bytes() == before
+
+
+def test_adding_second_profile_does_not_clobber_user_file(bundle, tmp_path):
+    """Incremental adoption: claude installed first, then a plain (both-profile)
+    init must NOT silently overwrite a user's own file sitting at a codex path."""
+    folder = tmp_path / "f"
+    assert _init(str(folder), "--claude-only", "--yes").exit_code == 0
+    (folder / "AGENTS.md").write_text("mine — keep\n")      # user's own file, unowned
+    res = _init(str(folder), "--yes")                        # add codex (default=both)
+    assert res.exit_code == 1                                # aborts on collision
+    assert "AGENTS.md" in res.output
+    assert (folder / "AGENTS.md").read_text() == "mine — keep\n"   # untouched
+    res2 = _init(str(folder), "--force")                     # --force lets it through
+    assert res2.exit_code == 0
+    assert (folder / "AGENTS.md").read_text() != "mine — keep\n"   # now overwritten

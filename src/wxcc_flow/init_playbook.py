@@ -171,21 +171,35 @@ def init(
         raise typer.Exit(1)
     all_files = read_bundle(bundle)
     manifests = {p: load_manifest(folder, p) for p in selected}
+    fresh = [p for p in selected if manifests[p] is None]
+    existing = [p for p in selected if manifests[p] is not None]
 
-    sel_files: dict[str, bytes] = {}
-    for p in selected:
-        sel_files.update(profile_files(all_files, p))
+    # Files already owned by a profile installed in this folder are the playbook's,
+    # not the user's — a fresh profile re-writing a shared file it shares with an
+    # already-installed profile is not a collision.
+    owned_by_existing: set[str] = set()
+    for p in existing:
+        owned_by_existing |= set(manifests[p].get("files", {}))
 
-    if all(m is None for m in manifests.values()):       # fresh for the selected profiles
-        collisions = sorted(rel for rel in sel_files if (folder / rel).exists())
-        if collisions and not force:
-            typer.echo(f"{folder} already contains files the playbook would overwrite:", err=True)
-            for rel in collisions:
-                typer.echo(f"  {rel}", err=True)
-            typer.echo("Re-run with --force to overwrite them, or choose an empty folder.", err=True)
-            raise typer.Exit(1)
-    elif not (force or yes) and not typer.confirm(
-        f"Refresh the wxcc-toolkit playbook ({', '.join(selected)}) in {folder} (owned files only)?"
+    # Collision guard runs for EACH fresh profile (not only when every selected
+    # profile is fresh), so adding a second profile can't silently clobber a user's
+    # own file at a generated path. --force overrides; --yes does NOT.
+    fresh_files: dict[str, bytes] = {}
+    for p in fresh:
+        fresh_files.update(profile_files(all_files, p))
+    collisions = sorted(rel for rel in fresh_files
+                        if rel not in owned_by_existing and (folder / rel).exists())
+    if collisions and not force:
+        typer.echo(f"{folder} already contains files the playbook would overwrite:", err=True)
+        for rel in collisions:
+            typer.echo(f"  {rel}", err=True)
+        typer.echo("Re-run with --force to overwrite them, or choose an empty folder.", err=True)
+        raise typer.Exit(1)
+
+    # Refreshing already-installed profiles touches only owned files; confirm unless
+    # --force/--yes.
+    if existing and not (force or yes) and not typer.confirm(
+        f"Refresh the wxcc-toolkit playbook ({', '.join(existing)}) in {folder} (owned files only)?"
     ):
         raise typer.Exit(0)
 
