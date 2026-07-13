@@ -171,6 +171,9 @@ outside the sandbox.
 | `src/wxcc_flow/generated/` | GENERATED CLI commands (57 promoted + `api` namespace) — NEVER hand-edit; emitted by the `tools.generator` toolchain from the spec snapshot + overrides YAML |
 | `tools.generator` (repo tooling) | OpenAPI→typer generator + drift toolchain: `python -m tools.generator.generate --all` regenerates, `drift_check.py` is the parity gate, `pull_spec.py` refreshes the snapshot; weekly drift runbook in its README.md |
 | `specs/flow-store-api-docs.json` (repo) | Committed Flow Store OpenAPI snapshot (91 ops) — refresh via `python -m tools.generator.pull_spec`; diff against live with `wxcc-flow spec-diff` |
+| `wxcc-dist/assemble.py` (repo) | Packages the shipped `_playbook/` bundle: copies the canonical Claude sources, then `assemble_codex` GENERATES the Codex profile (`AGENTS.md`, `.codex/`, `.agents/skills/`) from them. NEVER hand-edit `_playbook/` — re-run `python wxcc-dist/assemble.py`; it gates on a link-audit + a residual-Claude-ism audit |
+| `wxcc-dist/codex/` (repo) | Static overlay INPUTS for the generated Codex profile: `config.toml` (approval/sandbox header) and `agents-md-sections.md` (byte-exact heading anchors → replacement sections). Edit these, not the generated `_playbook/.codex/**` |
+| `tools.wheel_playbook_smoke.py` (repo tooling) | Installed-wheel smoke test — pip-installs the built wheel into a temp venv and runs `wxcc-flow init` in claude-only/codex-only/both modes; runs in `.github/workflows/ci.yml` (PR) + the release workflow |
 | `.codex/agents/wxcc-agent-builder.toml` | Main builder agent — drives the full workflow |
 | `.agents/skills/build-action/` | Skill: build Webex Connect flows for autonomous agent actions |
 | `.agents/skills/build-scripted-fulfillment/` | Skill: build fulfillment for scripted agent intents (digital + voice) |
