@@ -142,8 +142,14 @@ project folder to the new playbook version:
 wxcc-toolkit init my-wxcc-project --force
 ```
 
-`--force` refreshes only manifest-owned files (retired skills are removed, updated
-docs are rewritten) and leaves any files you added untouched.
+This automatically refreshes **only the profiles already installed** in that
+folder — a Claude-only folder stays Claude-only, a Codex-only folder stays
+Codex-only, and a dual-profile folder refreshes both. `--force` touches only
+manifest-owned files (retired skills are removed, updated docs are rewritten)
+and leaves any files you added untouched.
+
+To **add** the other profile to an existing folder, pass its flag —
+`wxcc-toolkit init my-wxcc-project --codex-only` (or `--claude-only`).
 
 ## Remove the playbook from a folder
 
