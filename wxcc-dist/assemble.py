@@ -73,6 +73,7 @@ CODEX_PIPELINE = [
     ("lit", ".claude/agents/wxcc-agent-builder.md", ".codex/agents/wxcc-agent-builder.toml"),
     ("lit", ".claude/settings.local.json", ".codex/config.toml"),
     ("lit", ".claude/settings.json", ".codex/config.toml"),
+    ("lit", ".mcp.json", ".codex/config.toml"),   # Codex configures MCP in .codex/config.toml, not the Claude-only root .mcp.json
     ("lit", ".claude/skills", ".agents/skills"),
     ("lit", ".claude/rules", ".codex/docs/rules"),
     ("lit", ".claude/", ".codex/"),   # generic path prefix — always last
@@ -87,6 +88,7 @@ CODEX_FORBIDDEN = [
     re.compile(r"Claude Code"),
     re.compile(r"CLAUDE\.md"),
     re.compile(r"\.claude/"),
+    re.compile(r"\.mcp\.json"),
     re.compile(r"(?<!\w)/wxcc-agent-builder\b"),
     re.compile(r"(?<!\w)/wxcc-debug\b"),
     re.compile(r"Skill\([a-z][a-z-]*\)"),

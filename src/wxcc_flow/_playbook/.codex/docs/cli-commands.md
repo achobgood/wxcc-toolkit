@@ -13,7 +13,7 @@ All 65 commands, verified against live prod on 2026-07-12:
 | `wxcc-flow health` | Check Flow Store API health (raw health text) |
 | `wxcc-flow build-info` | Show the Flow Store build info (version, build time) |
 | `wxcc-flow spec-diff` | Diff the LIVE API contract against the committed spec snapshot (`--exit-code` for CI). Repo/dev tool — the snapshot isn't shipped in the pip package; outside this repo pass `--snapshot PATH` |
-| `wxcc-flow init` | Materialize the bundled playbook (AGENTS.md, .codex/, docs/, .mcp.json) into a folder |
+| `wxcc-flow init` | Materialize the bundled playbook into a folder — both assistant profiles by default (`--claude-only`/`--codex-only` to restrict) |
 | **Flow CRUD & authoring** | |
 | `wxcc-flow list` | List all flows (or subflows with `--type SUBFLOW`) |
 | `wxcc-flow get` | Get flow metadata |

@@ -185,6 +185,7 @@ def test_phrase_map_path_swaps_most_specific_first():
     assert ".codex/docs/rules/bre-questions.md" in out
     assert ".codex/anythingelse" in out                  # generic catch-all last
     assert ".claude/" not in out
+    assert A.apply_phrase_map("edit .mcp.json to add a server") == "edit .codex/config.toml to add a server"
 
 
 def test_phrase_map_tool_isms():
