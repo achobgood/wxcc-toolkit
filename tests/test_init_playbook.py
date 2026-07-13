@@ -40,11 +40,21 @@ def _init(*args):
     return runner.invoke(app, ["init", *args])
 
 
+def _registered_opts(cmd_name):
+    """Flags registered on a top-level command — robust to typer/rich help
+    rendering, which colorizes flag text and can break literal substring matches
+    on newer typer/rich versions."""
+    import typer
+    click_app = typer.main.get_command(app)
+    return {opt for p in click_app.commands[cmd_name].params for opt in p.opts}
+
+
 def test_init_command_registered_on_main_app():
     """The flat registration in main.py exposes `init` with its flags."""
     r = runner.invoke(app, ["init", "--help"])
     assert r.exit_code == 0, r.output
-    assert "--uninstall" in r.output and "--force" in r.output
+    opts = _registered_opts("init")
+    assert "--uninstall" in opts and "--force" in opts
 
 
 def test_fresh_init_writes_tree_and_manifest(bundle, tmp_path):

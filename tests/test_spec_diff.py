@@ -58,4 +58,9 @@ class TestSpecDiffCli:
     def test_help_lists_exit_code_flag(self):
         r = runner.invoke(app, ["spec-diff", "--help"])
         assert r.exit_code == 0
-        assert "--exit-code" in r.output
+        # Inspect the registered flags directly — robust to typer/rich help
+        # rendering, which colorizes flag text and breaks substring matches on
+        # newer typer/rich versions.
+        import typer
+        opts = {o for p in typer.main.get_command(app).commands["spec-diff"].params for o in p.opts}
+        assert "--exit-code" in opts
