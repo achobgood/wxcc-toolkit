@@ -197,3 +197,51 @@ def test_phrase_map_tool_isms():
     assert "Skill(build-action)" not in out
     assert "the `build-action` skill" in out
     assert "Codex loads AGENTS.md" in out
+
+
+# ── Codex transform: AGENTS.md build ─────────────────────────────────────
+
+def test_replace_sections_swaps_anchored_block_and_errors_on_miss():
+    A = _load_assemble()
+    md = "# T\n\n## Keep\nbody\n\n## Swap\nold\n\n### Sub\nx\n\n## After\ny\n"
+    out = A.replace_sections(md, {"## Swap": "## Swapped\nnew"})
+    assert "## Swapped\nnew" in out and "old" not in out
+    assert "### Sub" not in out            # ### is deeper → swallowed with the ## block
+    assert "## After\ny" in out
+    with pytest.raises(KeyError):
+        A.replace_sections(md, {"## Missing": "z"})
+
+
+def test_extract_section_returns_heading_and_body():
+    A = _load_assemble()
+    md = "## A\na1\n\n### K\nk1\nk2\n\n### L\nl1\n\n## B\nb1\n"
+    block = A.extract_section(md, "### K")
+    assert block.startswith("### K\n") and "k2" in block
+    assert "l1" not in block and "## B" not in block
+    with pytest.raises(KeyError):
+        A.extract_section(md, "### Missing")
+
+
+def test_build_agents_md_real_claude_md_under_cap_with_pointers():
+    A = _load_assemble()
+    claude_md = (Path(A.REPO_ROOT) / "CLAUDE.md").read_text()
+    agents_md, extracted = A.build_agents_md(claude_md)
+    assert len(agents_md.encode("utf-8")) <= 32768
+    assert A.GROUNDING_MARKER in agents_md
+    assert ".codex/docs/cli-commands.md" in agents_md
+    assert ".codex/docs/sync-checklist.md" in agents_md
+    assert set(extracted) == {".codex/docs/cli-commands.md", ".codex/docs/sync-checklist.md"}
+    # the extracted table content moved OUT of AGENTS.md and INTO the docs
+    assert "| `wxcc-flow list` |" not in agents_md
+    assert "| `wxcc-flow list` |" in extracted[".codex/docs/cli-commands.md"]
+    assert "Sync Checklist" in extracted[".codex/docs/sync-checklist.md"]
+    for content in extracted.values():
+        assert "CLAUDE.md" not in content and ".claude/" not in content
+
+
+def test_build_agents_md_fails_hard_when_over_cap():
+    A = _load_assemble()
+    claude_md = (Path(A.REPO_ROOT) / "CLAUDE.md").read_text()
+    padded = ("x" * 40000) + "\n" + claude_md
+    with pytest.raises(ValueError, match="32768"):
+        A.build_agents_md(padded)
