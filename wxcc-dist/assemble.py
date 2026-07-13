@@ -182,6 +182,58 @@ def build_agents_md(claude_md: str) -> tuple[str, dict[str, str]]:
     return md, extracted
 
 
+def _split_frontmatter(md: str) -> tuple[dict[str, str], str]:
+    """Return (scalar-frontmatter dict, body). Handles `key: value` and `key: |`
+    block scalars; ignores list keys (tools/skills)."""
+    if not md.startswith("---\n"):
+        raise ValueError("agent file missing frontmatter")
+    end = md.index("\n---\n", 4)
+    head, body = md[4:end], md[end + 5:]
+    fm: dict[str, str] = {}
+    lines = head.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if not line or line[0] in " -":
+            i += 1
+            continue
+        key, _, val = line.partition(":")
+        key, val = key.strip(), val.strip()
+        if val == "|":
+            buf: list[str] = []
+            i += 1
+            while i < len(lines) and (lines[i].startswith(" ") or not lines[i]):
+                buf.append(lines[i].strip())
+                i += 1
+            fm[key] = " ".join(b for b in buf if b)
+            continue
+        if val:
+            fm[key] = val
+        i += 1
+    return fm, body
+
+
+def md_agent_to_toml(md: str) -> str:
+    """Convert a Claude agent .md (frontmatter + body) to a Codex agent TOML.
+    `model` stays unset (inherits the Codex session default); Claude's model
+    tier maps to reasoning effort instead."""
+    fm, body = _split_frontmatter(md)
+    body = apply_phrase_map(body).rstrip("\n")
+    if "'''" in body:
+        raise ValueError("agent body contains ''' — cannot use TOML literal string")
+    effort = _EFFORT.get(fm.get("model", "sonnet"), "medium")
+    name = fm["name"].strip()
+    desc = apply_phrase_map(fm.get("description", "").strip())
+    desc = desc.replace("\\", "\\\\").replace('"', '\\"')
+    return (
+        f'name = "{name}"\n'
+        f'description = "{desc}"\n'
+        f'model_reasoning_effort = "{effort}"\n'
+        f'sandbox_mode = "workspace-write"\n'
+        f"developer_instructions = '''\n{body}\n'''\n"
+    )
+
+
 def enumerate_sources(repo_root: Path) -> list[str]:
     """Tracked playbook files minus explicit excludes.
 

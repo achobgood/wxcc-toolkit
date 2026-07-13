@@ -245,3 +245,48 @@ def test_build_agents_md_fails_hard_when_over_cap():
     padded = ("x" * 40000) + "\n" + claude_md
     with pytest.raises(ValueError, match="32768"):
         A.build_agents_md(padded)
+
+
+# ── Codex transform: agent → TOML ────────────────────────────────────────
+
+AGENT_MD = """---
+name: test-agent
+description: |
+  Build things. Use SendMessage to continue the "existing" agent.
+tools: Read, Edit
+model: opus
+---
+Body here. Run `/wxcc-debug` if stuck. See .claude/skills/build-action/.
+"""
+
+
+def test_md_agent_to_toml_fields_and_phrase_map():
+    A = _load_assemble()
+    tomllib = pytest.importorskip("tomllib")
+    out = A.md_agent_to_toml(AGENT_MD)
+    data = tomllib.loads(out)
+    assert data["name"] == "test-agent"
+    assert data["model_reasoning_effort"] == "high"          # opus → high
+    assert data["sandbox_mode"] == "workspace-write"
+    assert "model" not in data                                # inherit Codex default
+    assert "SendMessage" not in data["description"]           # description phrase-mapped
+    assert '"existing"' in data["description"]                # quotes escaped, survive parse
+    assert "the `wxcc-debug` skill" in data["developer_instructions"]
+    assert ".agents/skills/build-action/" in data["developer_instructions"]
+
+
+def test_md_agent_to_toml_rejects_triple_quote_body():
+    A = _load_assemble()
+    bad = AGENT_MD.replace("Body here.", "Body ''' here.")
+    with pytest.raises(ValueError, match="'''"):
+        A.md_agent_to_toml(bad)
+
+
+def test_real_agent_converts_and_parses():
+    A = _load_assemble()
+    tomllib = pytest.importorskip("tomllib")
+    src = (Path(A.REPO_ROOT) / ".claude/agents/wxcc-agent-builder.md").read_text()
+    data = tomllib.loads(A.md_agent_to_toml(src))
+    assert data["name"] == "wxcc-agent-builder"
+    assert data["model_reasoning_effort"] == "high"           # frontmatter says model: opus
+    assert data["developer_instructions"].strip()
