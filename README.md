@@ -26,7 +26,7 @@ This materializes the playbook into `my-wxcc-project/`:
 ```
 my-wxcc-project/
 ├── CLAUDE.md                  # project instructions Claude Code loads at session start
-├── .mcp.json                  # MCP server config (placeholders — fill in step below)
+├── .mcp.json                  # MCP server config (optional — see "Configure MCP servers" below)
 ├── .claude/
 │   ├── settings.json          # pre-approved Skills, MCP tools, and wxcc-flow CLI
 │   ├── agents/                # the wxcc-agent-builder agent
@@ -44,22 +44,47 @@ owns. It never overwrites files you create. If the target folder already contain
 files the playbook would overwrite, `init` stops and lists them — re-run with
 `--force` to overwrite, or pick an empty folder.
 
-## Configure MCP servers
+## Configure the `wxcc-flow` CLI (recommended)
 
-Edit `.mcp.json` in your project folder and replace the placeholders:
+The `wxcc-flow` CLI is the preferred way to work with Flow Designer in this
+toolkit — 65 commands over the live 91-operation contract, pre-approved to run
+without permission prompts in the playbook's `.claude/settings.json`.
+
+```bash
+wxcc-flow configure
+```
+
+`configure` prompts for a Webex access token (generate a personal token at
+https://developer.webex.com — Getting Started → copy your token), then
+auto-resolves your org ID; the project ID resolves itself on first use.
+Developer-portal tokens expire after ~12 hours — re-run `configure` (or set
+`WXCC_FLOW_TOKEN`) when commands return a 401. The default endpoint is US-1
+production; if your WxCC org is homed in a different region, pass your region's
+Flow Store base URL via `wxcc-flow configure --base-url URL`.
+
+## Configure MCP servers (optional)
+
+Edit `.mcp.json` in your project folder and replace the placeholders. If you
+don't use one of these servers, remove its entry from `.mcp.json`.
 
 ### Supabase (if you use Supabase as your database)
 - `YOUR_SUPABASE_PROJECT_REF` — your Supabase project reference ID (Project Settings → General)
 - `YOUR_SUPABASE_ACCESS_TOKEN` — generate at https://supabase.com/dashboard/account/tokens
 
-### Flow Store (`wxcc-flow-builder` MCP — WxCC Flow Designer)
+### Flow Store (`wxcc-flow-builder` MCP — Cisco's official Flow Designer MCP server)
+
+An alternative to the `wxcc-flow` CLI for Flow Designer work — this toolkit
+prefers the CLI, but Cisco's MCP server remains fully supported if you'd rather
+use it.
+
 - `YOUR_FLOW_STORE_TOKEN` — a Webex access token valid for your WxCC org. Generate a
   personal token at https://developer.webex.com (Getting Started → copy your token).
-  The endpoint is `https://flow-store.produs1.ciscoccservice.com/flow-store/mcp`.
   Developer-portal tokens expire after ~12 hours; refresh and update `.mcp.json`
   when the server returns a 401.
-
-If you don't use one of these backends, remove its entry from `.mcp.json`.
+- The bundled URL (`https://flow-store.produs1.ciscoccservice.com/flow-store/mcp`)
+  is the **US-1 production** endpoint. Use production endpoints only; if your WxCC
+  org is homed in a different region, replace the host with your region's
+  production Flow Store URL.
 
 ## Start building
 

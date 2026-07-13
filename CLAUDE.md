@@ -121,7 +121,7 @@ All 65 commands, verified against live prod on 2026-07-12:
 | `wxcc-flow whoami` | Show the current user (raw getCurrentUser JSON — no Org/Project/Health lines) |
 | `wxcc-flow health` | Check Flow Store API health (raw health text) |
 | `wxcc-flow build-info` | Show the Flow Store build info (version, build time) |
-| `wxcc-flow spec-diff` | Diff the LIVE API contract against the committed spec snapshot (`--exit-code` for CI) |
+| `wxcc-flow spec-diff` | Diff the LIVE API contract against the committed spec snapshot (`--exit-code` for CI). Repo/dev tool — the snapshot isn't shipped in the pip package; outside this repo pass `--snapshot PATH` |
 | `wxcc-flow init` | Materialize the bundled playbook (CLAUDE.md, .claude/, docs/, .mcp.json) into a folder |
 | **Flow CRUD & authoring** | |
 | `wxcc-flow list` | List all flows (or subflows with `--type SUBFLOW`) |
@@ -226,7 +226,10 @@ See `docs/reference/flow-designer-flowir.md` for FlowIR format, tested activity 
 
 | Path | Purpose |
 |------|---------|
-| `src/wxcc_flow/` | `wxcc-flow` CLI — wraps Flow Designer REST API (config, client, output, all commands) |
+| `src/wxcc_flow/` | `wxcc-flow` CLI — config, client, output, the 8 hand-written commands (main.py), and the shipped playbook bundle (`_playbook/`) |
+| `src/wxcc_flow/generated/` | GENERATED CLI commands (57 promoted + `api` namespace) — NEVER hand-edit; emitted by the `tools.generator` toolchain from the spec snapshot + overrides YAML |
+| `tools.generator` (repo tooling) | OpenAPI→typer generator + drift toolchain: `python -m tools.generator.generate --all` regenerates, `drift_check.py` is the parity gate, `pull_spec.py` refreshes the snapshot; weekly drift runbook in its README.md |
+| `specs/flow-store-api-docs.json` (repo) | Committed Flow Store OpenAPI snapshot (91 ops) — refresh via `python -m tools.generator.pull_spec`; diff against live with `wxcc-flow spec-diff` |
 | `.claude/agents/wxcc-agent-builder.md` | Main builder agent — drives the full workflow |
 | `.claude/skills/build-action/` | Skill: build Webex Connect flows for autonomous agent actions |
 | `.claude/skills/build-scripted-fulfillment/` | Skill: build fulfillment for scripted agent intents (digital + voice) |
