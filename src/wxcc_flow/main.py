@@ -473,7 +473,8 @@ def _diff_specs(snap: dict, live: dict):
 def spec_diff(
     snapshot: str = typer.Option(
         "specs/flow-store-api-docs.json", "--snapshot",
-        help="Committed spec snapshot to diff against"),
+        help="Committed spec snapshot to diff against (default is relative to "
+             "the toolkit repo root — run from there, or pass an absolute path)"),
     exit_code: bool = typer.Option(
         False, "--exit-code",
         help="Exit 1 when the live contract differs from the snapshot (CI use)"),

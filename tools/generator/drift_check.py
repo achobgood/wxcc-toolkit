@@ -159,16 +159,20 @@ def check_manifest_parity(spec_ops: dict, classes: dict, ov: dict, manifest: lis
     for op_id in sorted(set(ov.get("warn_endpoints") or {}) & manifest_ids):
         if by_id[op_id].get("status") != "warn":
             problems.append(f"warn_endpoints op '{op_id}' lacks status=warn in manifest")
-    # top_level annotations: YAML promotions + extra-clone promotions, exactly
-    manifest_top = {(r["operationId"], r["command"]): r["top_level"]
-                    for r in manifest if r.get("top_level")}
-    names = ov.get("command_names") or {}
-    expected_top = {(op_id, names.get(op_id)): top
+    # top_level annotations: YAML promotions + extra-clone promotions, exactly.
+    # Base promotions key by operationId alone (unique among non-extra rows,
+    # checked above) so the check holds even for ops without a command_names
+    # entry; extra clones key by (operationId, clone name).
+    manifest_top = {("base", r["operationId"]): r["top_level"]
+                    for r in manifest if r.get("top_level") and not r.get("extra")}
+    manifest_top.update({("extra", (r["operationId"], r["command"])): r["top_level"]
+                         for r in manifest if r.get("top_level") and r.get("extra")})
+    expected_top = {("base", op_id): top
                     for op_id, top in (ov.get("top_level_commands") or {}).items()}
     for op_id, clones in (ov.get("extra_commands") or {}).items():
         for clone in clones or []:
             if clone.get("top_level"):
-                expected_top[(op_id, clone["name"])] = clone["top_level"]
+                expected_top[("extra", (op_id, clone["name"]))] = clone["top_level"]
     for key in sorted(set(expected_top) - set(manifest_top)):
         problems.append(f"promotion missing from manifest: {key} -> {expected_top[key]}")
     for key in sorted(set(manifest_top) - set(expected_top)):

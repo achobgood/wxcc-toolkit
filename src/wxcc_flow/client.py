@@ -155,7 +155,7 @@ class FlowClient:
             typer.echo("Error: Forbidden (403). Check org permissions.", err=True)
             raise typer.Exit(1)
         if resp.status_code == 400:
-            raise FlowStoreError(400, resp.text)
+            raise FlowStoreError(400, _error_body(resp))
         if resp.status_code == 404:
             typer.echo(f"Error: Not found (404). {_error_body(resp)}", err=True)
             raise typer.Exit(1)
