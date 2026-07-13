@@ -12,8 +12,8 @@ app = typer.Typer(help="Flow Store flows operations (generated).", no_args_is_he
 @app.command("get")
 def get(
     flow_id: str = typer.Argument(..., help="flowId"),
-    view: str = typer.Option(None, "--view", help=""),
-    flow_type: str = typer.Option(None, "--type", help=""),
+    view: str = typer.Option(None, "--view", help="Response view (server default: basic)"),
+    flow_type: str = typer.Option(None, "--type", help="FLOW or SUBFLOW (server default: FLOW)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -45,9 +45,9 @@ def merge_patch(
 @app.command("delete")
 def delete(
     flow_id: str = typer.Argument(..., help="flowId"),
-    server_force: str = typer.Option(None, "--server-force", help=""),
-    skip_rs_ep_check: bool = typer.Option(None, "--skip-rs-ep-check/--no-skip-rs-ep-check", help=""),
-    flow_type: str = typer.Option(None, "--type", help=""),
+    server_force: str = typer.Option(None, "--server-force", help="Sets the server's `force` query param (spec default: no)"),
+    skip_rs_ep_check: bool = typer.Option(None, "--skip-rs-ep-check/--no-skip-rs-ep-check", help="Sets the `skipRsEPCheck` query param — routing-strategy / entry-point usage check (server default: true)"),
+    flow_type: str = typer.Option(None, "--type", help="FLOW or SUBFLOW (server default: FLOW)"),
     force: bool = typer.Option(False, "--force", help="Skip the confirmation prompt"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
@@ -194,8 +194,8 @@ def search(
 def variable_mapping(
     current_flow_id: str = typer.Argument(..., help="currentFlowId"),
     hand_off_flow_id: str = typer.Argument(..., help="handOffFlowId"),
-    hand_off_tag_id: str = typer.Option(None, "--hand-off-tag-id", help=""),
-    hand_off_variable_source: str = typer.Option(None, "--hand-off-variable-source", help=""),
+    hand_off_tag_id: str = typer.Option(None, "--hand-off-tag-id", help="Hand-off tag ID"),
+    hand_off_variable_source: str = typer.Option(None, "--hand-off-variable-source", help="Hand-off variable source"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -221,8 +221,8 @@ def variable_mapping(
 @app.command("unique-name")
 def unique_name(
     flow_name: str = typer.Argument(..., help="flowName"),
-    flow_type: str = typer.Option(None, "--type", help=""),
-    flow_id: str = typer.Option(None, "--flow-id", help=""),
+    flow_type: str = typer.Option(None, "--type", help="FLOW or SUBFLOW (server default: FLOW)"),
+    flow_id: str = typer.Option(None, "--flow-id", help="Exclude this flow ID (for renames)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -250,7 +250,7 @@ def cmd_import(
     file: str = typer.Argument(..., help="Path to the JSON file to upload"),
     overwrite: str = typer.Option(None, "--overwrite", help="Determines whether to overwrite the existing flow or not. Possible val"),
     flow_type: str = typer.Option(None, "--type", help="Either of 'FLOW' or 'SUBFLOW'."),
-    associated_rcs: str = typer.Option(None, "--associated-rcs", help=""),
+    associated_rcs: str = typer.Option(None, "--associated-rcs", help="Sets the `associatedRcs` query param (associated resource collections)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -282,7 +282,7 @@ def cmd_import(
 @app.command("copy")
 def copy(
     source_flow_id: str = typer.Argument(..., help="sourceFlowId"),
-    associated_rcs: str = typer.Option(None, "--associated-rcs", help=""),
+    associated_rcs: str = typer.Option(None, "--associated-rcs", help="Sets the `associatedRcs` query param (associated resource collections)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -369,7 +369,7 @@ def consume_template(
 @app.command("unlock")
 def unlock(
     flow_id: str = typer.Argument(..., help="flowId"),
-    flow_type: str = typer.Option(None, "--type", help=""),
+    flow_type: str = typer.Option(None, "--type", help="FLOW or SUBFLOW (server default: FLOW)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -394,7 +394,7 @@ def unlock(
 def revert(
     flow_id: str = typer.Argument(..., help="flowId"),
     version_id: str = typer.Argument(..., help="versionId"),
-    flow_type: str = typer.Option(None, "--type", help=""),
+    flow_type: str = typer.Option(None, "--type", help="FLOW or SUBFLOW (server default: FLOW)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -419,7 +419,7 @@ def revert(
 @app.command("publish")
 def publish(
     flow_id: str = typer.Argument(..., help="flowId"),
-    flow_type: str = typer.Option(None, "--type", help=""),
+    flow_type: str = typer.Option(None, "--type", help="FLOW or SUBFLOW (server default: FLOW)"),
     validate: bool = typer.Option(None, "--validate/--no-validate", help="Sets skipValidation"),
     json_body: str = typer.Option(None, "--json-body", help="Full JSON body (overrides flags)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
@@ -452,7 +452,7 @@ def publish(
 @app.command("lock")
 def lock(
     flow_id: str = typer.Argument(..., help="flowId"),
-    flow_type: str = typer.Option(None, "--type", help=""),
+    flow_type: str = typer.Option(None, "--type", help="FLOW or SUBFLOW (server default: FLOW)"),
     output: str = typer.Option("json", "-o", "--output", help="Output format: json"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -475,14 +475,14 @@ def lock(
 
 @app.command("check")
 def check(
-    view: str = typer.Option(None, "--view", help=""),
-    skill_id: str = typer.Option(None, "--skill-id", help=""),
-    ep_id: str = typer.Option(None, "--ep-id", help=""),
-    flow_id: str = typer.Option(None, "--flow-id", help=""),
-    global_var: str = typer.Option(None, "--global-var", help=""),
-    search: str = typer.Option(None, "--search", help=""),
-    business_hour: str = typer.Option(None, "--business-hour", help=""),
-    flow_type: str = typer.Option(None, "--type", help=""),
+    view: str = typer.Option(None, "--view", help="Response view (server default: basic)"),
+    skill_id: str = typer.Option(None, "--skill-id", help="Find flows using this skill ID"),
+    ep_id: str = typer.Option(None, "--ep-id", help="Find flows attached to this entry point ID"),
+    flow_id: str = typer.Option(None, "--flow-id", help="Restrict to one flow ID"),
+    global_var: str = typer.Option(None, "--global-var", help="Find flows using this global variable"),
+    search: str = typer.Option(None, "--search", help="Search term"),
+    business_hour: str = typer.Option(None, "--business-hour", help="Find flows using this business-hours entity"),
+    flow_type: str = typer.Option(None, "--type", help="FLOW, SUBFLOW, or ALL (server default: ALL)"),
     with_drafts: bool = typer.Option(None, "--with-drafts/--no-with-drafts", help="Sets withDraftVersions"),
     output: str = typer.Option("table", "-o", "--output", help="Output format: table|json"),
     debug: bool = typer.Option(False, "--debug"),
@@ -553,8 +553,8 @@ def export(
 
 @app.command("global-variables")
 def global_variables(
-    search: str = typer.Option(None, "--search", help=""),
-    validate: str = typer.Option(None, "--validate", help=""),
+    search: str = typer.Option(None, "--search", help="Filter by name"),
+    validate: str = typer.Option(None, "--validate", help="Sets the `validate` query param"),
     output: str = typer.Option("table", "-o", "--output", help="Output format: table|json"),
     debug: bool = typer.Option(False, "--debug"),
 ):

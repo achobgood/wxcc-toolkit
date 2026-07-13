@@ -16,6 +16,8 @@ Phase-C keys: auto_resolve (pre-fetch a query param from the op's own path),
 param_defaults (seed params the server defaults differently), body_positional_list
 (array body from one positional list arg), confirm_message (delete confirm text),
 require_some_body (refuse an empty body).
+Phase-D2 keys: param_help / global_param_help (help backfill for spec params
+with no description — see _help_for for the precedence).
 """
 from __future__ import annotations
 
@@ -197,12 +199,25 @@ def _cli_flag_for(f: EndpointField, op_ovr: dict) -> str:
     return override if override else f.cli_flag
 
 
+def _help_for(f: EndpointField, op_ovr: dict) -> str:
+    """Resolve a field's help text (Phase-D2 backfill). Precedence: per-op
+    param_help (may override spec text) > spec text (description / enum
+    choices) > global_param_help (fills only where the spec ships nothing)."""
+    per_op = (op_ovr.get("param_help") or {}).get(f.name)
+    if per_op:
+        return _esc(per_op)
+    spec_help = _enum_help(f)
+    if spec_help:
+        return spec_help
+    return _esc((op_ovr.get("global_param_help") or {}).get(f.name) or "")
+
+
 def _option_def(f: EndpointField, op_ovr: dict, required: bool | None = None) -> str:
     """Emit one typer.Option definition for a query/body field (typed scalars)."""
     flag = _cli_flag_for(f, op_ovr)
     pyt = _py_type(f.field_type)
     req = f.required if required is None else required
-    help_text = _enum_help(f)
+    help_text = _help_for(f, op_ovr)
     if f.field_type == "bool":
         return (f'    {f.python_name}: bool = typer.Option(None, "--{flag}/--no-{flag}", '
                 f'help="{help_text}"),')

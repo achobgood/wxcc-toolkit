@@ -474,6 +474,79 @@ class TestPhaseCFeatures:
         ast.parse(code)
 
 
+class TestParamHelp:
+    """Phase-D2 help backfill: param_help (per-op) and global_param_help fill
+    flags whose spec params ship no description. Precedence: per-op param_help
+    > spec text (description/enum choices) > global_param_help."""
+
+    def _unblocked(self):
+        ovr = mini_overrides()
+        ovr.pop("blocked_endpoints")            # render mergeWidget as a real PATCH
+        return ovr
+
+    def test_per_op_param_help_lands(self, spec):
+        ovr = self._unblocked()
+        ovr["param_help"] = {"mergeWidget": {"flowType": "FLOW or SUBFLOW"}}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert '"--flow-type", help="FLOW or SUBFLOW"' in code
+        ast.parse(code)
+
+    def test_global_param_help_fills_empty_description(self, spec):
+        ovr = self._unblocked()
+        ovr["global_param_help"] = {"flowType": "FLOW or SUBFLOW (default FLOW)"}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert '"--flow-type", help="FLOW or SUBFLOW (default FLOW)"' in code
+
+    def test_spec_description_beats_global(self, spec):
+        """global_param_help fills GAPS only — real spec text must win."""
+        ovr = self._unblocked()
+        ovr["global_param_help"] = {"expectedVersion": "MUST NOT APPEAR"}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert "MUST NOT APPEAR" not in code
+        assert "Optimistic-lock version" in code
+
+    def test_enum_choices_beat_global(self, spec):
+        """Enum choices are spec text too — the global map must not clobber them."""
+        ovr = mini_overrides()
+        ovr["global_param_help"] = {"kind": "MUST NOT APPEAR"}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert "MUST NOT APPEAR" not in code
+        assert "Choices: A, B" in code
+
+    def test_per_op_beats_spec_description(self, spec):
+        ovr = self._unblocked()
+        ovr["param_help"] = {"mergeWidget": {"expectedVersion": "per-op override"}}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert "per-op override" in code
+        assert "Optimistic-lock version" not in code
+
+    def test_per_op_beats_global(self, spec):
+        ovr = self._unblocked()
+        ovr["param_help"] = {"mergeWidget": {"flowType": "per-op text"}}
+        ovr["global_param_help"] = {"flowType": "global text"}
+        code, _k, _r = _render_widgets(spec, ovr)
+        assert 'help="per-op text"' in code
+        assert "global text" not in code   # flowType exists only on mergeWidget
+
+    def test_lint_rejects_unknown_opid(self, spec):
+        ovr = mini_overrides()
+        ovr["param_help"] = {"notARealOp": {"flowType": "x"}}
+        with pytest.raises(SystemExit, match="notARealOp"):
+            G.lint_overrides(ovr, spec)
+
+    def test_lint_rejects_unknown_param_name(self, spec):
+        ovr = mini_overrides()
+        ovr["param_help"] = {"mergeWidget": {"notAParam": "x"}}
+        with pytest.raises(SystemExit, match="not a query/path param"):
+            G.lint_overrides(ovr, spec)
+
+    def test_lint_rejects_global_name_on_no_op(self, spec):
+        ovr = mini_overrides()
+        ovr["global_param_help"] = {"noSuchParam": "x"}
+        with pytest.raises(SystemExit, match="noSuchParam"):
+            G.lint_overrides(ovr, spec)
+
+
 class TestExtraCommands:
     def test_clone_renders_alongside_base(self, spec):
         ovr = mini_overrides()

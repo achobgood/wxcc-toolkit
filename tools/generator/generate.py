@@ -43,6 +43,8 @@ _OPID_SECTIONS = (
     "promote_to_argument", "success_echo", "expose_path_param",
     # Phase-C parity features:
     "param_defaults", "body_positional_list", "confirm_message", "require_some_body",
+    # Phase-D2 help backfill (per-op; may override spec text):
+    "param_help",
 )
 
 # Keys an extra_commands entry may set in its `overrides` block. These are the
@@ -55,14 +57,14 @@ _EXTRA_OVERRIDE_KEYS = {
     "body_from_file", "body_fields_override", "body_transform", "exit_code_from",
     "param_flag_inversions", "command_type", "body_defaults", "warn", "multipart",
     "content_type", "auto_resolve", "param_defaults", "body_positional_list",
-    "confirm_message", "require_some_body",
+    "confirm_message", "require_some_body", "param_help",
 }
 
 # Non-opId-keyed top-level sections. Any top-level key not here or in
 # _OPID_SECTIONS is a typo/unknown and fails the lint (so a mistyped section name
 # — e.g. skip_endpoint — can never silently drop its whole payload).
 _OTHER_SECTIONS = {"groups", "auto_inject_from_config", "skip_tags", "keep_endpoints",
-                   "global_param_cli_names"}
+                   "global_param_cli_names", "global_param_help"}
 
 
 def _spec_index(spec: dict) -> tuple[set, dict]:
@@ -123,6 +125,23 @@ def lint_overrides(overrides: dict, spec: dict) -> None:
                 unknown = set(rspec) - {"field", "unwrap", "forward_params"}
                 if unknown:
                     errors.append(f"auto_resolve_params.{oid}.{pname}: unknown keys {sorted(unknown)}")
+    # param_help: each entry must name a declared query/path param of the op
+    # (a typo'd wire name would otherwise silently backfill nothing)
+    for oid, entries in (overrides.get("param_help") or {}).items():
+        op = ops.get(oid)
+        if op is None:
+            continue   # already reported above
+        declared = {p.get("name") for p in op.get("parameters", [])
+                    if p.get("in") in ("query", "path")}
+        for pname in (entries or {}):
+            if pname not in declared:
+                errors.append(f"param_help.{oid}: {pname!r} is not a query/path param of the op")
+    # global_param_help: each wire name must be a query/path param of >=1 spec op
+    all_params = {p.get("name") for op in ops.values()
+                  for p in op.get("parameters", []) if p.get("in") in ("query", "path")}
+    for pname in (overrides.get("global_param_help") or {}):
+        if pname not in all_params:
+            errors.append(f"global_param_help: {pname!r} is not a query/path param of any spec op")
     # extra_commands: entries need a name; overrides limited to resolved keys
     for oid, entries in (overrides.get("extra_commands") or {}).items():
         for i, entry in enumerate(entries or []):
@@ -173,6 +192,8 @@ def build_resolver(overrides: dict):
     body_pos = overrides.get("body_positional_list") or {}
     confirm_msg = overrides.get("confirm_message") or {}
     require_body = overrides.get("require_some_body") or {}
+    param_help = overrides.get("param_help") or {}
+    global_help = overrides.get("global_param_help") or {}
 
     def resolve(ep):
         oid = ep.operation_id
@@ -194,6 +215,13 @@ def build_resolver(overrides: dict):
         merged_cli = {**global_cli, **cli_names.get(oid, {})}
         if merged_cli:
             o["param_cli_names"] = merged_cli
+        # help backfill (Phase D2): kept as TWO keys — precedence differs (per-op
+        # param_help may override spec text; global_param_help only fills params
+        # whose spec description is empty — the renderer's _help_for arbitrates).
+        if oid in param_help:
+            o["param_help"] = param_help[oid]
+        if global_help:
+            o["global_param_help"] = global_help
         if oid in promote_arg:
             o["promote_to_argument"] = promote_arg[oid]
         if oid in success_echo:

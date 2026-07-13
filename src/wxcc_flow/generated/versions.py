@@ -11,7 +11,7 @@ app = typer.Typer(help="Flow Store versions operations (generated).", no_args_is
 @app.command("list")
 def cmd_list(
     flow_id: str = typer.Argument(..., help="flowId"),
-    sort: str = typer.Option(None, "--sort", help=""),
+    sort: str = typer.Option(None, "--sort", help="Sets the `sort` query param (sort order)"),
     page: int = typer.Option(None, "--page", help="Fetch a single 0-based page. Omit to fetch all pages."),
     size: int = typer.Option(None, "--size", help="Page size (default 100 when fetching all)."),
     output: str = typer.Option("table", "-o", "--output", help="Output format: table|json"),
@@ -130,8 +130,8 @@ def draft(
 
 @app.command("all")
 def cmd_all(
-    search_by: str = typer.Option(None, "--search-by", help=""),
-    sort: str = typer.Option(None, "--sort", help=""),
+    search_by: str = typer.Option(None, "--search-by", help="Filter (sets the `searchBy` query param)"),
+    sort: str = typer.Option(None, "--sort", help="Sets the `sort` query param (sort order)"),
     page: int = typer.Option(None, "--page", help="Fetch a single 0-based page. Omit to fetch all pages."),
     size: int = typer.Option(None, "--size", help="Page size (default 100 when fetching all)."),
     output: str = typer.Option("table", "-o", "--output", help="Output format: table|json"),

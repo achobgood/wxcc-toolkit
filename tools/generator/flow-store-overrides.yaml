@@ -193,6 +193,52 @@ help_notes:
   exportFlowVersion: "--version defaults to 'draft' (historical CLI behavior; 'latest' = most recent published, or pass a version ID)."
   publishFlowVersion: "Publish-time validation is OFF by default (validate explicitly with 'wxcc-flow validate'); add --validate to validate at publish time."
 
+# ── param_help (Phase D2): per-flag help backfill for spec params that ship NO
+#    description (opId → wire param name → text). Precedence: per-op param_help
+#    > spec description/enum choices > global_param_help. Wording sources: the
+#    deleted hand commands' live-verified help (git fbbe1cb/7798e35), CLAUDE.md
+#    CLI docs, and the spec's own schema defaults — nothing invented. ──────────
+param_help:
+  findFlowById:
+    view: "Response view (server default: basic)"
+  removeFlowById:
+    force: "Sets the server's `force` query param (spec default: no)"
+    skipRsEPCheck: "Sets the `skipRsEPCheck` query param — routing-strategy / entry-point usage check (server default: true)"
+  performFlowVariableAutoMapping:
+    handOffTagId: "Hand-off tag ID"
+    handOffVariableSource: "Hand-off variable source"
+  checkFlowNameUniqueness:
+    flowId: "Exclude this flow ID (for renames)"
+  importFlowVersion_1:
+    associatedRcs: "Sets the `associatedRcs` query param (associated resource collections)"
+  copyFlow:
+    associatedRcs: "Sets the `associatedRcs` query param (associated resource collections)"
+  findFlows_1:
+    view: "Response view (server default: basic)"
+    skillId: "Find flows using this skill ID"
+    epId: "Find flows attached to this entry point ID"
+    flowId: "Restrict to one flow ID"
+    globalVar: "Find flows using this global variable"
+    search: "Search term"
+    businessHour: "Find flows using this business-hours entity"
+    flowType: "FLOW, SUBFLOW, or ALL (server default: ALL)"
+  getGlobalVariables:
+    search: "Filter by name"
+    validate: "Sets the `validate` query param"
+  getPublishedFlowVersions:
+    sort: "Sets the `sort` query param (sort order)"
+  getAllFlowVersions:
+    searchBy: "Filter (sets the `searchBy` query param)"
+    sort: "Sets the `sort` query param (sort order)"
+
+# ── global_param_help (Phase D2): applied to EVERY op, but only fills params
+#    whose spec description is EMPTY — real spec text always wins. (Unlike it,
+#    per-op param_help above may override anything.) flowType default verified
+#    per-op in the spec: FLOW everywhere it applies; findFlows_1 (default ALL)
+#    carries its own param_help entry. ──────────────────────────────────────────
+global_param_help:
+  flowType: "FLOW or SUBFLOW (server default: FLOW)"
+
 # ── global flag renames (applied to EVERY op; a per-op param_cli_names entry
 #    wins on a conflicting wire name). Preserves the documented `--type` flag
 #    (CLAUDE.md ships `--type SUBFLOW` on ~16 commands) instead of the derived
