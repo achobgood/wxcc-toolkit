@@ -13,13 +13,15 @@
 # Internal Superpowers scratch (brainstorm state, server pid/log) — never ship
 .superpowers/
 
-# Saved third-party (Cisco) documentation pages — copyrighted, do not redistribute
-docs/plans/Build and manage flows with Flow Designer.html
-docs/plans/Build and manage flows with Flow Designer_files/
-
 # Distribution artifacts — the pip package (wxcc-toolkit) supersedes the zip
 *.zip
 /dist/
 /build/
 *.egg-info/
 __pycache__/
+
+# Internal working artifacts — not shipped in the pip package, not for GitHub
+docs/superpowers/
+docs/plans/
+docs/tests/
+docs/wxcc-pipeline-visual.html
