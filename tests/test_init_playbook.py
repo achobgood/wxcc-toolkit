@@ -32,6 +32,15 @@ def bundle(tmp_path, monkeypatch):
         p = b / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text)
+    # Codex profile (mirrors what assemble_codex generates)
+    (b / "AGENTS.md").write_text("# agents instructions\n")
+    (b / ".codex" / "agents").mkdir(parents=True)
+    (b / ".codex" / "agents" / "wxcc-agent-builder.toml").write_text('name = "x"\n')
+    (b / ".codex" / "docs" / "rules").mkdir(parents=True)
+    (b / ".codex" / "docs" / "rules" / "r.md").write_text("rule\n")
+    (b / ".codex" / "config.toml").write_text('approval_policy = "on-request"\n')
+    (b / ".agents" / "skills" / "sk").mkdir(parents=True)
+    (b / ".agents" / "skills" / "sk" / "SKILL.md").write_text("skill\n")
     monkeypatch.setattr(I, "bundle_root", lambda: b)
     return b
 
@@ -125,3 +134,75 @@ def test_uninstall_without_manifest_errors(bundle, tmp_path):
     pb = tmp_path / "pb"
     pb.mkdir()
     assert _init(str(pb), "--uninstall").exit_code == 1
+
+
+# ── Both-profile init ────────────────────────────────────────────────────
+
+def test_classify_profiles():
+    assert I.classify("CLAUDE.md") == "claude"
+    assert I.classify(".claude/skills/a/SKILL.md") == "claude"
+    assert I.classify(".mcp.json") == "claude"
+    assert I.classify("AGENTS.md") == "codex"
+    assert I.classify(".codex/config.toml") == "codex"
+    assert I.classify(".agents/skills/a/SKILL.md") == "codex"
+    assert I.classify("docs/reference/x.md") == "shared"
+
+
+def test_default_init_writes_both_profiles(bundle, tmp_path):
+    folder = tmp_path / "f"
+    res = _init(str(folder), "--yes")
+    assert res.exit_code == 0
+    for p in ("CLAUDE.md", "AGENTS.md", ".mcp.json", ".codex/config.toml",
+              ".agents/skills/sk/SKILL.md",
+              ".claude/.wxcc-manifest.json", ".codex/.wxcc-manifest.json"):
+        assert (folder / p).exists(), p
+    cm = json.loads((folder / ".claude/.wxcc-manifest.json").read_text())
+    xm = json.loads((folder / ".codex/.wxcc-manifest.json").read_text())
+    assert cm["profile"] == "claude" and xm["profile"] == "codex"
+    assert not any(r.startswith((".codex/", ".agents/")) or r == "AGENTS.md"
+                   for r in cm["files"])
+    assert not any(r.startswith(".claude/") or r in ("CLAUDE.md", ".mcp.json")
+                   for r in xm["files"])
+    assert any(r.startswith("docs/") for r in cm["files"])   # shared in both
+    assert any(r.startswith("docs/") for r in xm["files"])
+
+
+def test_claude_only_and_codex_only(bundle, tmp_path):
+    c = tmp_path / "c"
+    assert _init(str(c), "--claude-only", "--yes").exit_code == 0
+    assert (c / "CLAUDE.md").exists() and not (c / "AGENTS.md").exists()
+    assert not (c / ".codex").exists() and not (c / ".agents").exists()
+    x = tmp_path / "x"
+    assert _init(str(x), "--codex-only", "--yes").exit_code == 0
+    assert (x / "AGENTS.md").exists() and not (x / "CLAUDE.md").exists()
+    assert not (x / ".claude").exists() and not (x / ".mcp.json").exists()
+    assert (x / "docs").is_dir()
+
+
+def test_mutually_exclusive_flags_rejected(bundle, tmp_path):
+    res = _init(str(tmp_path / "f"), "--claude-only", "--codex-only")
+    assert res.exit_code == 1
+
+
+def test_uninstall_one_profile_keeps_shared_docs(bundle, tmp_path):
+    folder = tmp_path / "f"
+    _init(str(folder), "--yes")
+    res = _init(str(folder), "--codex-only", "--uninstall")
+    assert res.exit_code == 0
+    assert not (folder / "AGENTS.md").exists()
+    assert not (folder / ".codex").exists() and not (folder / ".agents").exists()
+    assert (folder / "docs").is_dir()                      # still owned by claude
+    assert (folder / "CLAUDE.md").exists()
+    res2 = _init(str(folder), "--claude-only", "--uninstall")
+    assert res2.exit_code == 0
+    assert not (folder / "docs").exists()                  # last owner gone
+    assert not (folder / "CLAUDE.md").exists()
+
+
+def test_refresh_one_profile_leaves_other_untouched(bundle, tmp_path):
+    folder = tmp_path / "f"
+    _init(str(folder), "--yes")
+    marker = folder / "AGENTS.md"
+    before = marker.read_bytes()
+    assert _init(str(folder), "--claude-only", "--force").exit_code == 0
+    assert marker.read_bytes() == before
