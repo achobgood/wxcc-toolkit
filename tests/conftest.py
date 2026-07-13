@@ -22,6 +22,11 @@ import pytest
 
 import wxcc_flow.config as cfg
 
+# Keep the whole suite hermetic: the CLI's PyPI update check fires from the
+# top-level callback on every in-process CliRunner call and every subprocess
+# run_cli call. Disable it session-wide so no test ever reaches out to PyPI.
+os.environ.setdefault("WXCC_FLOW_NO_UPDATE_CHECK", "1")
+
 REPO = Path(__file__).resolve().parent.parent
 MANIFEST = json.loads(
     (REPO / "src" / "wxcc_flow" / "generated" / "_manifest.json").read_text()

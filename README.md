@@ -143,6 +143,20 @@ The Codex profile is generated from the Claude profile at build time — the
 two never drift. Codex has no per-command allowlist, so expect an approval
 prompt when a command needs to run outside the workspace sandbox.
 
+## Staying up to date
+
+`pip` never upgrades on its own, so `wxcc-flow` checks PyPI once a day (a
+best-effort call with a 1-second timeout, cached in `~/.wxcc-flow/`) and, when a
+newer release exists, prints one line to stderr before the command runs:
+
+> wxcc-flow 0.3.4 available (you have 0.3.3). Upgrade: pip install -U wxcc-toolkit && wxcc-flow init
+
+Both steps matter: `pip install -U wxcc-toolkit` updates the CLI, and
+`wxcc-flow init` (see below) refreshes the playbook files in your project folder.
+The check never blocks a command and stays silent on any network error. Silence
+it with the `--no-update-check` flag, by setting `WXCC_FLOW_NO_UPDATE_CHECK=1`,
+or in CI (it is skipped automatically when `CI` is set).
+
 ## Update an existing project folder
 
 After upgrading the package (`pip install --upgrade wxcc-toolkit`), refresh a
