@@ -59,6 +59,7 @@ The Cisco help docs do not document `FailureCode` or `FailureDescription` output
 | Output Path | Fires When |
 |---|---|
 | **Per-digit branches** | One output edge per configured digit (0–9). Maximum **10 branches**. |
+| **Extra registry ports** (`#`, `*`) | Beyond digits 0–9, the activity registry also exposes `#` and `*` output ports (`flow-designer-flowir.md` § 8 Activity Registry — the round-trip-tested `wxcc-flow describe ivr-menu` port list is `0`–`9`, `#`, `*`, `timeout`, `invalid`, `error`). Whether the UI Custom Menu Links dropdown offers `#`/`*` as selectable menu-link values, and the exact trigger semantics of these two ports, are **not documented / not verified**. |
 | **No-Input Timeout** | No-Input Timeout duration elapsed without receiving any DTMF input. Wire this to a counter-increment + Condition loop to implement retry behavior (see Advanced Settings note above). |
 | **Unmatched Entry** | Caller pressed a DTMF digit not configured in the Custom Menu Links section. Wire this to a clarification prompt and loop back to the Menu activity to let the caller try again. |
 | **Undefined Error** | System error during Menu execution. The live activity registry (`wxcc-flow describe ivr-menu`, 2026-07-11) exposes an `error` output port (`isErrorPath: true`); its exact trigger semantics are not documented. |

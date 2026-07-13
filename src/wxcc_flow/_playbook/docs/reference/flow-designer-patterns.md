@@ -698,6 +698,8 @@ WxCC Flow Designer (separate from Webex Connect) exposes REST APIs for programma
 - Structural changes (adding activities, changing links, modifying conditions) must be done in the Flow Designer GUI after importing
 - Use these APIs for CI/CD pipelines, flow backup/restore, and cross-environment promotion — not for programmatic flow editing
 
+> **Cross-reference:** The "not for programmatic flow editing" caveat above applies only to this proprietary export/import JSON format. Programmatic flow *building* via the supported FlowIR path is documented separately in `flow-designer-flowir.md` § 9 (Validate → Create Workflow) and the `build-flow-programmatic` skill.
+
 ---
 
 ## Queue Parking Pattern
