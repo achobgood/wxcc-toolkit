@@ -2,6 +2,7 @@
 *.swp
 *.swo
 *~
+*.bak
 .env
 .env.local
 .claude/settings.local.json
@@ -25,3 +26,4 @@ docs/superpowers/
 docs/plans/
 docs/tests/
 docs/wxcc-pipeline-visual.html
+/CODEX_PORT_PROMPT.md

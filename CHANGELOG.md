@@ -2,6 +2,17 @@
 
 All notable changes to **wxcc-toolkit** are documented here.
 
+## 0.3.1 — 2026-07-13
+
+Repository hygiene only — no changes to the shipped package, CLI, or playbook
+content.
+
+### Changed
+- Removed internal planning/test-run artifacts (`docs/superpowers/`, `docs/plans/`,
+  `docs/tests/`, `docs/wxcc-pipeline-visual.html`) from git tracking and history.
+  None of these were part of the shipped playbook (`docs/reference`, `docs/playbooks`,
+  `docs/templates`, `docs/examples` are unaffected).
+
 ## 0.3.0 — 2026-07-13
 
 Adds an OpenAI Codex CLI profile alongside the existing Claude Code playbook, so
