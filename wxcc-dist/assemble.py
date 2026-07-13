@@ -308,7 +308,7 @@ def assemble(repo_root: Path, bundle_dir: Path,
 def _body_start(rel: str, lines: list[str]) -> int:
     """Rules frontmatter is exempt: its paths: globs (src/...) are Claude Code
     activation metadata — inert in a customer folder, not broken references."""
-    if rel.startswith(".claude/rules/") and lines and lines[0].strip() == "---":
+    if rel.startswith((".claude/rules/", ".codex/docs/rules/")) and lines and lines[0].strip() == "---":
         for i in range(1, len(lines)):
             if lines[i].strip() == "---":
                 return i + 1
@@ -330,17 +330,82 @@ def audit_bundle(bundle_dir: Path) -> list[tuple[str, int, str]]:
     return violations
 
 
+def assemble_codex(bundle_dir: Path, curated_mcp: Path) -> None:
+    """Transform the assembled Claude bundle into the Codex shape, in place.
+    Skills → .agents/skills (Codex's project-skill discovery dir); ONLY .md
+    files are phrase-mapped — scripts/assets are byte-copied. Markdown rule
+    guidance → .codex/docs/rules/ (NOT .codex/rules/, which Codex reserves
+    for *.rules permission policy)."""
+    claude = bundle_dir / ".claude"
+    for p in sorted((claude / "skills").rglob("*")):
+        if not p.is_file():
+            continue
+        dest = bundle_dir / ".agents" / "skills" / p.relative_to(claude / "skills")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if p.suffix == ".md":
+            dest.write_text(apply_phrase_map(p.read_text()))
+        else:
+            shutil.copy2(p, dest)
+    for p in sorted((claude / "rules").rglob("*")):
+        if p.is_file():
+            dest = bundle_dir / ".codex" / "docs" / "rules" / p.relative_to(claude / "rules")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(apply_phrase_map(p.read_text()))
+    for p in sorted((claude / "agents").glob("*.md")):
+        dest = bundle_dir / ".codex" / "agents" / (p.stem + ".toml")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(md_agent_to_toml(p.read_text()))
+    agents_md, extracted = build_agents_md((bundle_dir / "CLAUDE.md").read_text())
+    (bundle_dir / "AGENTS.md").write_text(agents_md)
+    for rel, content in extracted.items():
+        dest = bundle_dir / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content)
+    cfg_dest = bundle_dir / ".codex" / "config.toml"
+    cfg_dest.parent.mkdir(parents=True, exist_ok=True)
+    cfg_dest.write_text((CODEX_OVERLAY / "config.toml").read_text()
+                        + _mcp_servers_toml(curated_mcp))
+
+
+def audit_codex(bundle_dir: Path) -> list[tuple[str, int, str]]:
+    """Residual Claude-isms in generated Codex outputs
+    (AGENTS.md + .codex/** + .agents/**)."""
+    out: list[tuple[str, int, str]] = []
+    targets = [bundle_dir / "AGENTS.md"]
+    for sub in (".codex", ".agents"):
+        d = bundle_dir / sub
+        if d.is_dir():
+            targets += [p for p in sorted(d.rglob("*")) if p.is_file()]
+    for path in targets:
+        if not path.is_file():
+            continue
+        rel = path.relative_to(bundle_dir).as_posix()
+        try:
+            lines = path.read_text().splitlines()
+        except UnicodeDecodeError:
+            continue
+        for i, line in enumerate(lines):
+            for pat in CODEX_FORBIDDEN:
+                if pat.search(line):
+                    out.append((rel, i + 1, pat.pattern))
+    return out
+
+
 def main() -> int:
     files = assemble(REPO_ROOT, BUNDLE_DIR, CURATED_SETTINGS, CURATED_MCP)
+    assemble_codex(BUNDLE_DIR, CURATED_MCP)
     violations = audit_bundle(BUNDLE_DIR)
-    if violations:
+    codex_violations = audit_codex(BUNDLE_DIR)
+    if violations or codex_violations:
         for rel, lineno, tok in violations:
             print(f"LINK-AUDIT {rel}:{lineno}: residual '{tok}'", file=sys.stderr)
-        print(f"FAILED: {len(violations)} repo-only reference(s) in the bundle.",
-              file=sys.stderr)
+        for rel, lineno, tok in codex_violations:
+            print(f"CODEX-AUDIT {rel}:{lineno}: residual Claude-ism /{tok}/", file=sys.stderr)
+        print(f"FAILED: {len(violations) + len(codex_violations)} bad reference(s) "
+              "in the bundle.", file=sys.stderr)
         return 1
-    print(f"Assembled {len(files) + 2} files into "
-          f"{BUNDLE_DIR.relative_to(REPO_ROOT)} (incl. curated settings.json + .mcp.json)")
+    print(f"Assembled {len(files) + 2} Claude file(s) + generated Codex profile "
+          f"(.codex/ + .agents/ + AGENTS.md) into {BUNDLE_DIR.relative_to(REPO_ROOT)}")
     return 0
 
 

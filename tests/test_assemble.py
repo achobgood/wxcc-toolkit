@@ -316,3 +316,74 @@ def test_mcp_servers_toml_rejects_unknown_shape(tmp_path):
     bad.write_text(json.dumps({"mcpServers": {"weird": {"transport": "ws"}}}))
     with pytest.raises(ValueError, match="weird"):
         A._mcp_servers_toml(bad)
+
+
+# ── Codex transform: full pass ───────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def codex_bundle(tmp_path_factory):
+    """Real-repo assembly incl. the Codex pass, into a temp bundle dir."""
+    A = _load_assemble()
+    bundle = tmp_path_factory.mktemp("bundle") / "_playbook"
+    A.assemble(Path(A.REPO_ROOT), bundle, Path(A.CURATED_SETTINGS), Path(A.CURATED_MCP))
+    A.assemble_codex(bundle, Path(A.CURATED_MCP))
+    return A, bundle
+
+
+def test_assemble_codex_produces_expected_tree(codex_bundle):
+    A, bundle = codex_bundle
+    assert (bundle / "AGENTS.md").is_file()
+    assert (bundle / ".codex/config.toml").is_file()
+    assert (bundle / ".codex/agents/wxcc-agent-builder.toml").is_file()
+    assert (bundle / ".codex/docs/cli-commands.md").is_file()
+    assert (bundle / ".codex/docs/sync-checklist.md").is_file()
+    assert sorted(p.name for p in (bundle / ".codex/docs/rules").iterdir()) == \
+           sorted(p.name for p in (bundle / ".claude/rules").iterdir())
+    # no stray .codex/skills or .codex/rules (skills → .agents; rules → docs/rules)
+    assert not (bundle / ".codex/skills").exists()
+    assert not (bundle / ".codex/rules").exists()
+
+
+def test_codex_skills_equivalence(codex_bundle):
+    A, bundle = codex_bundle
+    src_root = bundle / ".claude/skills"
+    dst_root = bundle / ".agents/skills"
+    src_files = sorted(p.relative_to(src_root) for p in src_root.rglob("*") if p.is_file())
+    dst_files = sorted(p.relative_to(dst_root) for p in dst_root.rglob("*") if p.is_file())
+    assert src_files == dst_files
+    for rel in src_files:
+        s, d = src_root / rel, dst_root / rel
+        if rel.suffix == ".md":
+            assert d.read_text() == A.apply_phrase_map(s.read_text()), rel
+        else:
+            assert d.read_bytes() == s.read_bytes(), rel   # generate.py etc. byte-copied
+
+
+def test_codex_config_toml_parses_with_mcp_servers(codex_bundle):
+    A, bundle = codex_bundle
+    tomllib = pytest.importorskip("tomllib")
+    data = tomllib.loads((bundle / ".codex/config.toml").read_text())
+    assert data["approval_policy"] == "on-request"
+    assert data["sandbox_mode"] == "workspace-write"
+    assert set(data["mcp_servers"]) == {"supabase", "wxcc-flow-builder"}
+
+
+def test_audit_codex_clean_on_real_bundle_and_catches_seeded_ism(codex_bundle, tmp_path):
+    A, bundle = codex_bundle
+    assert A.audit_codex(bundle) == []
+    seeded = tmp_path / "b"
+    (seeded / ".codex").mkdir(parents=True)
+    (seeded / ".codex" / "x.md").write_text("Claude Code does it.\nSee .claude/skills/a/\n")
+    (seeded / "AGENTS.md").write_text("path .agents/skills/wxcc-debug/ is fine\n")
+    hits = A.audit_codex(seeded)
+    assert {(rel, line) for rel, line, _ in hits} == {(".codex/x.md", 1), (".codex/x.md", 2)}
+
+
+def test_claude_half_of_bundle_unchanged_by_codex_pass(codex_bundle):
+    A, bundle = codex_bundle
+    fresh = bundle.parent / "claude_only"
+    A.assemble(Path(A.REPO_ROOT), fresh, Path(A.CURATED_SETTINGS), Path(A.CURATED_MCP))
+    for p in sorted(fresh.rglob("*")):
+        if p.is_file():
+            rel = p.relative_to(fresh)
+            assert (bundle / rel).read_bytes() == p.read_bytes(), rel
