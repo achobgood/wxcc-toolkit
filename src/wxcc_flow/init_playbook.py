@@ -1,4 +1,4 @@
-"""wxcc-toolkit init — materialize the bundled Claude Code playbook into a local folder.
+"""wxcc-toolkit init — materialize the bundled playbook (Claude Code + Codex) into a local folder.
 
 The folder layout mirrors the repo (CLAUDE.md, .claude/, docs/, .mcp.json), so
 Claude Code loads everything natively and no path is rewritten. A manifest
@@ -16,7 +16,28 @@ import typer
 import wxcc_flow
 from wxcc_flow import __version__
 
-MANIFEST_REL = Path(".claude") / ".wxcc-manifest.json"
+PROFILES = ("claude", "codex")
+# Per-profile manifests. Claude keeps its ORIGINAL location → existing installs
+# refresh/uninstall unchanged; Codex adds its own alongside it.
+MANIFEST_REL = {
+    "claude": Path(".claude") / ".wxcc-manifest.json",
+    "codex": Path(".codex") / ".wxcc-manifest.json",
+}
+
+
+def classify(rel: str) -> str:
+    """Which profile owns a bundle-relative path; docs/ is 'shared'."""
+    if rel.startswith((".codex/", ".agents/")) or rel == "AGENTS.md":
+        return "codex"
+    if rel.startswith(".claude/") or rel in ("CLAUDE.md", ".mcp.json"):
+        return "claude"
+    return "shared"
+
+
+def profile_files(bundle_files: dict[str, bytes], profile: str) -> dict[str, bytes]:
+    """The subset a profile materializes: its own files plus shared files."""
+    return {rel: c for rel, c in bundle_files.items()
+            if classify(rel) in (profile, "shared")}
 
 
 def bundle_root() -> Path:
@@ -36,16 +57,17 @@ def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def load_manifest(folder: Path) -> dict | None:
-    path = folder / MANIFEST_REL
+def load_manifest(folder: Path, profile: str) -> dict | None:
+    path = folder / MANIFEST_REL[profile]
     return json.loads(path.read_text()) if path.exists() else None
 
 
-def save_manifest(folder: Path, hashes: dict[str, str]) -> None:
-    path = folder / MANIFEST_REL
+def save_manifest(folder: Path, profile: str, hashes: dict[str, str]) -> None:
+    path = folder / MANIFEST_REL[profile]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(
-        {"wxcc_playbook": True, "version": __version__, "files": hashes}, indent=2
+        {"wxcc_playbook": True, "profile": profile,
+         "version": __version__, "files": hashes}, indent=2
     ))
 
 
@@ -86,66 +108,116 @@ def apply_bundle(
     return written, deleted, hashes
 
 
-def do_uninstall(folder: Path) -> None:
-    manifest = load_manifest(folder)
-    if manifest is None:
+def do_uninstall(folder: Path, profiles: list[str]) -> None:
+    """Remove files owned by the targeted profiles; shared files survive while
+    any non-targeted installed profile still lists them."""
+    manifests = {p: load_manifest(folder, p) for p in PROFILES}
+    present = {p for p, m in manifests.items() if m is not None}
+    targets = [p for p in profiles if p in present]
+    if not targets:
         typer.echo(f"No wxcc-toolkit manifest in {folder} — nothing to uninstall.", err=True)
         raise typer.Exit(1)
-    for rel in sorted(manifest.get("files", {})):
-        target = folder / rel
-        if target.exists():
-            target.unlink()
-        _prune_empty_dirs(target.parent, folder)
-    (folder / MANIFEST_REL).unlink(missing_ok=True)
-    _prune_empty_dirs((folder / MANIFEST_REL).parent, folder)
-    typer.echo(f"Removed the wxcc-toolkit playbook from {folder}. Files you added were left in place.")
+    keep_owned: set[str] = set()
+    for p in present - set(targets):
+        keep_owned |= set(manifests[p].get("files", {}))
+    for p in targets:
+        for rel in sorted(manifests[p].get("files", {})):
+            if rel in keep_owned:
+                continue                    # shared file still owned by a kept profile
+            target = folder / rel
+            if target.exists():
+                target.unlink()
+            _prune_empty_dirs(target.parent, folder)
+        mpath = folder / MANIFEST_REL[p]
+        mpath.unlink(missing_ok=True)
+        _prune_empty_dirs(mpath.parent, folder)
+    typer.echo(f"Removed the wxcc-toolkit playbook ({', '.join(targets)}) from {folder}. "
+               "Files you added were left in place.")
+
+
+_START_HINT = {
+    "claude": "Open this folder in Claude Code (start a fresh session), then run "
+              "/wxcc-agent-builder — skills and agents load at session start.",
+    "codex": "Open this folder in Codex (`codex` in the folder; trust it when "
+             "prompted — the shipped .codex/config.toml and MCP servers only "
+             "apply in a trusted folder). AGENTS.md and .agents/skills load "
+             "automatically.",
+}
 
 
 # Registered on the main Typer app in main.py via `app.command(name="init")(init)`.
-# A plain function (Typer-style parameter defaults) — no local Typer app needed.
 def init(
     folder: Path = typer.Argument(Path("wxcc-toolkit-playbook"), help="Target playbook folder."),
+    claude_only: bool = typer.Option(False, "--claude-only", help="Materialize only the Claude Code playbook."),
+    codex_only: bool = typer.Option(False, "--codex-only", help="Materialize only the Codex playbook."),
     force: bool = typer.Option(False, "--force", help="Overwrite collisions / refresh without prompting."),
     yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
-    uninstall: bool = typer.Option(False, "--uninstall", help="Remove every manifest-owned file, then the manifest."),
+    uninstall: bool = typer.Option(False, "--uninstall", help="Remove manifest-owned files, then the manifest(s)."),
 ):
-    """Materialize the bundled playbook (CLAUDE.md, .claude/, docs/, .mcp.json) into FOLDER."""
+    """Materialize the bundled playbook (Claude Code + Codex) into FOLDER."""
     folder = folder.resolve()
+    if claude_only and codex_only:
+        typer.echo("Use at most one of --claude-only / --codex-only.", err=True)
+        raise typer.Exit(1)
+    selected = ["claude"] if claude_only else ["codex"] if codex_only else list(PROFILES)
+
     if uninstall:
-        do_uninstall(folder)
+        do_uninstall(folder, selected)
         return
 
     bundle = bundle_root()
     if not bundle.is_dir():
         typer.echo("Bundled playbook not found in this wxcc-toolkit install.", err=True)
         raise typer.Exit(1)
-    bundle_files = read_bundle(bundle)
-    manifest = load_manifest(folder)
+    all_files = read_bundle(bundle)
+    manifests = {p: load_manifest(folder, p) for p in selected}
+    fresh = [p for p in selected if manifests[p] is None]
+    existing = [p for p in selected if manifests[p] is not None]
 
-    if manifest is None:
-        collisions = sorted(rel for rel in bundle_files if (folder / rel).exists())
-        if collisions and not force:
-            typer.echo(f"{folder} already contains files the playbook would overwrite:", err=True)
-            for rel in collisions:
-                typer.echo(f"  {rel}", err=True)
-            typer.echo("Re-run with --force to overwrite them, or choose an empty folder.", err=True)
-            raise typer.Exit(1)
-        owned: dict[str, str] = {}
-    else:
-        owned = manifest.get("files", {})
-        if not (force or yes) and not typer.confirm(
-            f"Refresh the wxcc-toolkit playbook in {folder} (owned files only)?"
+    # Files already owned by a profile installed in this folder are the playbook's,
+    # not the user's — a fresh profile re-writing a shared file it shares with an
+    # already-installed profile is not a collision.
+    owned_by_existing: set[str] = set()
+    for p in existing:
+        owned_by_existing |= set(manifests[p].get("files", {}))
+
+    # Collision guard runs for EACH fresh profile (not only when every selected
+    # profile is fresh), so adding a second profile can't silently clobber a user's
+    # own file at a generated path. --force overrides; --yes does NOT.
+    fresh_files: dict[str, bytes] = {}
+    for p in fresh:
+        fresh_files.update(profile_files(all_files, p))
+    collisions = sorted(rel for rel in fresh_files
+                        if rel not in owned_by_existing and (folder / rel).exists())
+    if collisions and not force:
+        typer.echo(f"{folder} already contains files the playbook would overwrite:", err=True)
+        for rel in collisions:
+            typer.echo(f"  {rel}", err=True)
+        typer.echo("Re-run with --force to overwrite them, or choose an empty folder.", err=True)
+        raise typer.Exit(1)
+
+    # Refreshing already-installed profiles touches only owned files; adding a fresh
+    # profile alongside is additive. Confirm unless --force/--yes.
+    if existing and not (force or yes):
+        actions = [f"refresh {', '.join(existing)}"]
+        if fresh:
+            actions.append(f"add {', '.join(fresh)}")
+        if not typer.confirm(
+            f"This will {' and '.join(actions)} in {folder} (owned files only). Continue?"
         ):
             raise typer.Exit(0)
 
     folder.mkdir(parents=True, exist_ok=True)
-    written, deleted, hashes = apply_bundle(folder, bundle_files, owned)
-    save_manifest(folder, hashes)
+    written = deleted = 0
+    for p in selected:
+        owned = (manifests[p] or {}).get("files", {})
+        w, d, hashes = apply_bundle(folder, profile_files(all_files, p), owned)
+        save_manifest(folder, p, hashes)
+        written += len(w)
+        deleted += len(d)
     typer.echo(
-        f"Playbook v{__version__}: {len(written)} file(s) written, "
-        f"{len(deleted)} removed, in {folder}"
+        f"Playbook v{__version__} ({', '.join(selected)}): "
+        f"{written} file(s) written, {deleted} removed, in {folder}"
     )
-    typer.echo(
-        "Open this folder in Claude Code (start a fresh session), then run "
-        "/wxcc-agent-builder — skills and agents load at session start."
-    )
+    for p in selected:
+        typer.echo(_START_HINT[p])

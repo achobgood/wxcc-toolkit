@@ -158,3 +158,232 @@ def test_audit_exempts_rules_frontmatter_but_not_body(tmp_path):
     got = A.audit_bundle(bundle)
     assert (".claude/rules/x.md", 6, "tools/") in got                 # body still audited
     assert not any(ln == 3 for _, ln, _ in got)                       # frontmatter glob exempt
+
+
+# ── Codex transform: phrase map ──────────────────────────────────────────
+
+def test_phrase_map_rewrites_prose_slash_commands_not_paths():
+    A = _load_assemble()
+    out = A.apply_phrase_map(
+        "Run `/wxcc-agent-builder` to start. Run `/wxcc-debug` to debug.\n"
+        "| `.claude/skills/wxcc-debug/` | Skill: debug failing actions |\n"
+    )
+    assert "/wxcc-agent-builder" not in out
+    assert "wxcc-agent-builder** agent" in out
+    assert ".agents/skills/wxcc-debug/" in out          # path segment survived intact
+    assert "the `wxcc-debug` skill" in out
+
+
+def test_phrase_map_path_swaps_most_specific_first():
+    A = _load_assemble()
+    out = A.apply_phrase_map(
+        ".claude/agents/wxcc-agent-builder.md and .claude/settings.json "
+        "and .claude/rules/bre-questions.md and .claude/anythingelse"
+    )
+    assert ".codex/agents/wxcc-agent-builder.toml" in out
+    assert ".codex/config.toml" in out
+    assert ".codex/docs/rules/bre-questions.md" in out
+    assert ".codex/anythingelse" in out                  # generic catch-all last
+    assert ".claude/" not in out
+
+
+def test_phrase_map_tool_isms():
+    A = _load_assemble()
+    out = A.apply_phrase_map(
+        "use SendMessage to continue; YOU MUST call Skill(build-action); "
+        "Claude Code loads CLAUDE.md"
+    )
+    assert "SendMessage" not in out
+    assert "Skill(build-action)" not in out
+    assert "the `build-action` skill" in out
+    assert "Codex loads AGENTS.md" in out
+
+
+# ── Codex transform: AGENTS.md build ─────────────────────────────────────
+
+def test_replace_sections_swaps_anchored_block_and_errors_on_miss():
+    A = _load_assemble()
+    md = "# T\n\n## Keep\nbody\n\n## Swap\nold\n\n### Sub\nx\n\n## After\ny\n"
+    out = A.replace_sections(md, {"## Swap": "## Swapped\nnew"})
+    assert "## Swapped\nnew" in out and "old" not in out
+    assert "### Sub" not in out            # ### is deeper → swallowed with the ## block
+    assert "## After\ny" in out
+    with pytest.raises(KeyError):
+        A.replace_sections(md, {"## Missing": "z"})
+
+
+def test_extract_section_returns_heading_and_body():
+    A = _load_assemble()
+    md = "## A\na1\n\n### K\nk1\nk2\n\n### L\nl1\n\n## B\nb1\n"
+    block = A.extract_section(md, "### K")
+    assert block.startswith("### K\n") and "k2" in block
+    assert "l1" not in block and "## B" not in block
+    with pytest.raises(KeyError):
+        A.extract_section(md, "### Missing")
+
+
+def test_build_agents_md_real_claude_md_under_cap_with_pointers():
+    A = _load_assemble()
+    claude_md = (Path(A.REPO_ROOT) / "CLAUDE.md").read_text()
+    agents_md, extracted = A.build_agents_md(claude_md)
+    assert len(agents_md.encode("utf-8")) <= 32768
+    assert A.GROUNDING_MARKER in agents_md
+    assert ".codex/docs/cli-commands.md" in agents_md
+    assert ".codex/docs/sync-checklist.md" in agents_md
+    assert set(extracted) == {".codex/docs/cli-commands.md", ".codex/docs/sync-checklist.md"}
+    # the extracted table content moved OUT of AGENTS.md and INTO the docs
+    assert "| `wxcc-flow list` |" not in agents_md
+    assert "| `wxcc-flow list` |" in extracted[".codex/docs/cli-commands.md"]
+    assert "Sync Checklist" in extracted[".codex/docs/sync-checklist.md"]
+    for content in extracted.values():
+        assert "CLAUDE.md" not in content and ".claude/" not in content
+
+
+def test_build_agents_md_fails_hard_when_over_cap():
+    A = _load_assemble()
+    claude_md = (Path(A.REPO_ROOT) / "CLAUDE.md").read_text()
+    padded = ("x" * 40000) + "\n" + claude_md
+    with pytest.raises(ValueError, match="32768"):
+        A.build_agents_md(padded)
+
+
+# ── Codex transform: agent → TOML ────────────────────────────────────────
+
+AGENT_MD = """---
+name: test-agent
+description: |
+  Build things. Use SendMessage to continue the "existing" agent.
+tools: Read, Edit
+model: opus
+---
+Body here. Run `/wxcc-debug` if stuck. See .claude/skills/build-action/.
+"""
+
+
+def test_md_agent_to_toml_fields_and_phrase_map():
+    A = _load_assemble()
+    tomllib = pytest.importorskip("tomllib")
+    out = A.md_agent_to_toml(AGENT_MD)
+    data = tomllib.loads(out)
+    assert data["name"] == "test-agent"
+    assert data["model_reasoning_effort"] == "high"          # opus → high
+    assert data["sandbox_mode"] == "workspace-write"
+    assert "model" not in data                                # inherit Codex default
+    assert "SendMessage" not in data["description"]           # description phrase-mapped
+    assert '"existing"' in data["description"]                # quotes escaped, survive parse
+    assert "the `wxcc-debug` skill" in data["developer_instructions"]
+    assert ".agents/skills/build-action/" in data["developer_instructions"]
+
+
+def test_md_agent_to_toml_rejects_triple_quote_body():
+    A = _load_assemble()
+    bad = AGENT_MD.replace("Body here.", "Body ''' here.")
+    with pytest.raises(ValueError, match="'''"):
+        A.md_agent_to_toml(bad)
+
+
+def test_real_agent_converts_and_parses():
+    A = _load_assemble()
+    tomllib = pytest.importorskip("tomllib")
+    src = (Path(A.REPO_ROOT) / ".claude/agents/wxcc-agent-builder.md").read_text()
+    data = tomllib.loads(A.md_agent_to_toml(src))
+    assert data["name"] == "wxcc-agent-builder"
+    assert data["model_reasoning_effort"] == "high"           # frontmatter says model: opus
+    assert data["developer_instructions"].strip()
+
+
+# ── Codex transform: MCP translation ─────────────────────────────────────
+
+def test_mcp_servers_toml_translates_sanitized_bundle():
+    A = _load_assemble()
+    tomllib = pytest.importorskip("tomllib")
+    frag = A._mcp_servers_toml(Path(A.DIST_DIR) / "mcp.bundled.json")
+    data = tomllib.loads(frag)
+    src = json.loads((Path(A.DIST_DIR) / "mcp.bundled.json").read_text())
+    assert set(data["mcp_servers"]) == set(src["mcpServers"])
+    sup = data["mcp_servers"]["supabase"]
+    assert sup["command"] == "npx"
+    assert sup["args"] == src["mcpServers"]["supabase"]["args"]
+    assert sup["env"] == {"SUPABASE_ACCESS_TOKEN": "YOUR_SUPABASE_ACCESS_TOKEN"}
+    fb = data["mcp_servers"]["wxcc-flow-builder"]
+    assert fb["url"] == src["mcpServers"]["wxcc-flow-builder"]["url"]
+    assert fb["http_headers"] == {"Authorization": "Bearer YOUR_FLOW_STORE_TOKEN"}
+
+
+def test_mcp_servers_toml_rejects_unknown_shape(tmp_path):
+    A = _load_assemble()
+    bad = tmp_path / "mcp.json"
+    bad.write_text(json.dumps({"mcpServers": {"weird": {"transport": "ws"}}}))
+    with pytest.raises(ValueError, match="weird"):
+        A._mcp_servers_toml(bad)
+
+
+# ── Codex transform: full pass ───────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def codex_bundle(tmp_path_factory):
+    """Real-repo assembly incl. the Codex pass, into a temp bundle dir."""
+    A = _load_assemble()
+    bundle = tmp_path_factory.mktemp("bundle") / "_playbook"
+    A.assemble(Path(A.REPO_ROOT), bundle, Path(A.CURATED_SETTINGS), Path(A.CURATED_MCP))
+    A.assemble_codex(bundle, Path(A.CURATED_MCP))
+    return A, bundle
+
+
+def test_assemble_codex_produces_expected_tree(codex_bundle):
+    A, bundle = codex_bundle
+    assert (bundle / "AGENTS.md").is_file()
+    assert (bundle / ".codex/config.toml").is_file()
+    assert (bundle / ".codex/agents/wxcc-agent-builder.toml").is_file()
+    assert (bundle / ".codex/docs/cli-commands.md").is_file()
+    assert (bundle / ".codex/docs/sync-checklist.md").is_file()
+    assert sorted(p.name for p in (bundle / ".codex/docs/rules").iterdir()) == \
+           sorted(p.name for p in (bundle / ".claude/rules").iterdir())
+    # no stray .codex/skills or .codex/rules (skills → .agents; rules → docs/rules)
+    assert not (bundle / ".codex/skills").exists()
+    assert not (bundle / ".codex/rules").exists()
+
+
+def test_codex_skills_equivalence(codex_bundle):
+    A, bundle = codex_bundle
+    src_root = bundle / ".claude/skills"
+    dst_root = bundle / ".agents/skills"
+    src_files = sorted(p.relative_to(src_root) for p in src_root.rglob("*") if p.is_file())
+    dst_files = sorted(p.relative_to(dst_root) for p in dst_root.rglob("*") if p.is_file())
+    assert src_files == dst_files
+    for rel in src_files:
+        s, d = src_root / rel, dst_root / rel
+        if rel.suffix == ".md":
+            assert d.read_text() == A.apply_phrase_map(s.read_text()), rel
+        else:
+            assert d.read_bytes() == s.read_bytes(), rel   # generate.py etc. byte-copied
+
+
+def test_codex_config_toml_parses_with_mcp_servers(codex_bundle):
+    A, bundle = codex_bundle
+    tomllib = pytest.importorskip("tomllib")
+    data = tomllib.loads((bundle / ".codex/config.toml").read_text())
+    assert data["approval_policy"] == "on-request"
+    assert data["sandbox_mode"] == "workspace-write"
+    assert set(data["mcp_servers"]) == {"supabase", "wxcc-flow-builder"}
+
+
+def test_audit_codex_clean_on_real_bundle_and_catches_seeded_ism(codex_bundle, tmp_path):
+    A, bundle = codex_bundle
+    assert A.audit_codex(bundle) == []
+    seeded = tmp_path / "b"
+    (seeded / ".codex").mkdir(parents=True)
+    (seeded / ".codex" / "x.md").write_text("Claude Code does it.\nSee .claude/skills/a/\n")
+    (seeded / "AGENTS.md").write_text("path .agents/skills/wxcc-debug/ is fine\n")
+    hits = A.audit_codex(seeded)
+    assert {(rel, line) for rel, line, _ in hits} == {(".codex/x.md", 1), (".codex/x.md", 2)}
+
+
+def test_claude_half_of_bundle_unchanged_by_codex_pass(codex_bundle):
+    A, bundle = codex_bundle
+    fresh = bundle.parent / "claude_only"
+    A.assemble(Path(A.REPO_ROOT), fresh, Path(A.CURATED_SETTINGS), Path(A.CURATED_MCP))
+    for p in sorted(fresh.rglob("*")):
+        if p.is_file():
+            rel = p.relative_to(fresh)
+            assert (bundle / rel).read_bytes() == p.read_bytes(), rel

@@ -1,0 +1,33 @@
+# wxcc-toolkit Codex playbook config — GENERATED into .codex/config.toml.
+# Do not hand-edit the copy in a playbook folder; edit wxcc-dist/codex/config.toml
+# and re-run `python wxcc-dist/assemble.py`.
+#
+# REQUIRED: repo-local .codex/config.toml (including the [mcp_servers] block
+# below) takes effect ONLY after you trust this folder in Codex — the first
+# `codex` run in the folder prompts for trust (recorded under [projects] in
+# ~/.codex/config.toml). Until then Codex uses its global defaults.
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+# Optional "playbook may be stale → refresh" nudge. Repo-local hooks do NOT
+# fire in interactive sessions (openai/codex#17532, still open 2026-07-13),
+# so if you want this, install it GLOBALLY in ~/.codex/config.toml, not here:
+#
+# [[hooks.SessionStart]]
+# [[hooks.SessionStart.hooks]]
+# type = "command"
+# command = "echo 'wxcc playbook folder — run: wxcc-flow init . --force  to refresh to the installed wxcc-toolkit version.'"
+# timeout = 15
+
+# MCP servers — generated from wxcc-dist/mcp.bundled.json (sanitized
+# placeholders; fill in your real values before use). Env-backed HTTP
+# auth (bearer_token_env_var) exists in Codex but its header format is
+# undocumented — this ships the same static placeholders as .mcp.json.
+[mcp_servers.supabase]
+command = "npx"
+args = ["-y", "@supabase/mcp-server-supabase@latest", "--project-ref", "YOUR_SUPABASE_PROJECT_REF"]
+env = { "SUPABASE_ACCESS_TOKEN" = "YOUR_SUPABASE_ACCESS_TOKEN" }
+
+[mcp_servers.wxcc-flow-builder]
+url = "https://flow-store.produs1.ciscoccservice.com/flow-store/mcp"
+http_headers = { "Authorization" = "Bearer YOUR_FLOW_STORE_TOKEN" }

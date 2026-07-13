@@ -24,10 +24,18 @@ wxcc-toolkit = "wxcc_flow.main:run"
 where = ["src"]
 
 [tool.setuptools.package-data]
-# Three patterns are required: setuptools' recursive glob does not descend into
+# Five patterns are required: setuptools' recursive glob does not descend into
 # dot-directories AND does not match hidden files, so "_playbook/**" alone would
-# drop both .claude/ and the bundle-root .mcp.json from the wheel.
-wxcc_flow = ["_playbook/**", "_playbook/.claude/**", "_playbook/.mcp.json"]
+# drop .claude/, .codex/, .agents/, and the bundle-root .mcp.json from the
+# wheel — each hidden tree needs its own pattern. AGENTS.md is non-hidden, so
+# it's already covered by "_playbook/**".
+wxcc_flow = [
+    "_playbook/**",
+    "_playbook/.claude/**",
+    "_playbook/.mcp.json",
+    "_playbook/.codex/**",
+    "_playbook/.agents/**",
+]
 
 [dependency-groups]
 # Generator/test toolchain (tools/generator/*.py + pytest import yaml);
