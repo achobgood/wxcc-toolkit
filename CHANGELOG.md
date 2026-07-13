@@ -2,6 +2,15 @@
 
 All notable changes to **wxcc-toolkit** are documented here.
 
+## 0.3.2 — 2026-07-13
+
+Repository hygiene only — no changes to the shipped package, CLI, or playbook
+content.
+
+### Changed
+- Removed a stray internal presentation file (`WxCC_AI_Agent_Builder_Toolkit.pptx`)
+  from git tracking and history. It was never part of the shipped playbook.
+
 ## 0.3.1 — 2026-07-13
 
 Repository hygiene only — no changes to the shipped package, CLI, or playbook
