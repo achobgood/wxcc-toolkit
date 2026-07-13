@@ -27,7 +27,7 @@ CLAUDE_DIRS = (".claude/agents", ".claude/skills", ".claude/rules")
 CODEX_DIRS = (".codex/agents", ".codex/docs/rules", ".agents/skills")
 SANITIZED = (
     (".mcp.json", "YOUR_SUPABASE_PROJECT_REF"),
-    (".codex/config.toml", "YOUR_FLOW_STORE_TOKEN"),
+    (".codex/config.toml", "WXCC_FLOW_TOKEN"),   # Flow Store auth is env-backed, no token in-file
 )
 
 

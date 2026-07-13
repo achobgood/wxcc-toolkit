@@ -307,7 +307,8 @@ def test_mcp_servers_toml_translates_sanitized_bundle():
     assert sup["env"] == {"SUPABASE_ACCESS_TOKEN": "YOUR_SUPABASE_ACCESS_TOKEN"}
     fb = data["mcp_servers"]["wxcc-flow-builder"]
     assert fb["url"] == src["mcpServers"]["wxcc-flow-builder"]["url"]
-    assert fb["http_headers"] == {"Authorization": "Bearer YOUR_FLOW_STORE_TOKEN"}
+    assert fb["bearer_token_env_var"] == "WXCC_FLOW_TOKEN"   # env-backed: no token in the file
+    assert "http_headers" not in fb                            # static header replaced
 
 
 def test_mcp_servers_toml_rejects_unknown_shape(tmp_path):

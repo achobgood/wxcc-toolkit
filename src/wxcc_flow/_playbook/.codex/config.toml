@@ -19,10 +19,10 @@ sandbox_mode = "workspace-write"
 # command = "echo 'wxcc playbook folder — run: wxcc-flow init . --force  to refresh to the installed wxcc-toolkit version.'"
 # timeout = 15
 
-# MCP servers — generated from wxcc-dist/mcp.bundled.json (sanitized
-# placeholders; fill in your real values before use). Env-backed HTTP
-# auth (bearer_token_env_var) exists in Codex but its header format is
-# undocumented — this ships the same static placeholders as .mcp.json.
+# MCP servers — generated from wxcc-dist/mcp.bundled.json. HTTP servers listed
+# in _CODEX_HTTP_BEARER_ENV use bearer_token_env_var so Codex sources the token
+# from an env var at runtime (no secret in this file); WXCC_FLOW_TOKEN is the
+# same var the wxcc-flow CLI reads. Other servers ship sanitized placeholders.
 [mcp_servers.supabase]
 command = "npx"
 args = ["-y", "@supabase/mcp-server-supabase@latest", "--project-ref", "YOUR_SUPABASE_PROJECT_REF"]
@@ -30,4 +30,4 @@ env = { "SUPABASE_ACCESS_TOKEN" = "YOUR_SUPABASE_ACCESS_TOKEN" }
 
 [mcp_servers.wxcc-flow-builder]
 url = "https://flow-store.produs1.ciscoccservice.com/flow-store/mcp"
-http_headers = { "Authorization" = "Bearer YOUR_FLOW_STORE_TOKEN" }
+bearer_token_env_var = "WXCC_FLOW_TOKEN"
