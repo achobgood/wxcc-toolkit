@@ -13,6 +13,7 @@ repo-only token fails the run.
 """
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -232,6 +233,43 @@ def md_agent_to_toml(md: str) -> str:
         f'sandbox_mode = "workspace-write"\n'
         f"developer_instructions = '''\n{body}\n'''\n"
     )
+
+
+def _mcp_servers_toml(curated_mcp: Path) -> str:
+    """Translate the SANITIZED mcp.bundled.json (never the live .mcp.json —
+    it holds a real token) into a Codex [mcp_servers] TOML fragment.
+    Unknown server shapes fail assembly loudly rather than ship broken."""
+    data = json.loads(curated_mcp.read_text())
+
+    def q(s: str) -> str:
+        if '"' in s or "\\" in s or "\n" in s:
+            raise ValueError(f"MCP value needs escaping not supported here: {s!r}")
+        return f'"{s}"'
+
+    out = [
+        "",
+        "# MCP servers — generated from wxcc-dist/mcp.bundled.json (sanitized",
+        "# placeholders; fill in your real values before use). Env-backed HTTP",
+        "# auth (bearer_token_env_var) exists in Codex but its header format is",
+        "# undocumented — this ships the same static placeholders as .mcp.json.",
+    ]
+    for name, cfg in data["mcpServers"].items():
+        out.append(f"[mcp_servers.{name}]")
+        if "command" in cfg:
+            out.append(f'command = {q(cfg["command"])}')
+            out.append(f'args = [{", ".join(q(a) for a in cfg.get("args", []))}]')
+            if cfg.get("env"):
+                pairs = ", ".join(f"{k} = {q(v)}" for k, v in cfg["env"].items())
+                out.append(f"env = {{ {pairs} }}")
+        elif "url" in cfg:
+            out.append(f'url = {q(cfg["url"])}')
+            if cfg.get("headers"):
+                pairs = ", ".join(f"{q(k)} = {q(v)}" for k, v in cfg["headers"].items())
+                out.append(f"http_headers = {{ {pairs} }}")
+        else:
+            raise ValueError(f"unsupported MCP server shape for {name!r}: {sorted(cfg)}")
+        out.append("")
+    return "\n".join(out)
 
 
 def enumerate_sources(repo_root: Path) -> list[str]:

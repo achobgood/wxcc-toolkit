@@ -290,3 +290,29 @@ def test_real_agent_converts_and_parses():
     assert data["name"] == "wxcc-agent-builder"
     assert data["model_reasoning_effort"] == "high"           # frontmatter says model: opus
     assert data["developer_instructions"].strip()
+
+
+# ── Codex transform: MCP translation ─────────────────────────────────────
+
+def test_mcp_servers_toml_translates_sanitized_bundle():
+    A = _load_assemble()
+    tomllib = pytest.importorskip("tomllib")
+    frag = A._mcp_servers_toml(Path(A.DIST_DIR) / "mcp.bundled.json")
+    data = tomllib.loads(frag)
+    src = json.loads((Path(A.DIST_DIR) / "mcp.bundled.json").read_text())
+    assert set(data["mcp_servers"]) == set(src["mcpServers"])
+    sup = data["mcp_servers"]["supabase"]
+    assert sup["command"] == "npx"
+    assert sup["args"] == src["mcpServers"]["supabase"]["args"]
+    assert sup["env"] == {"SUPABASE_ACCESS_TOKEN": "YOUR_SUPABASE_ACCESS_TOKEN"}
+    fb = data["mcp_servers"]["wxcc-flow-builder"]
+    assert fb["url"] == src["mcpServers"]["wxcc-flow-builder"]["url"]
+    assert fb["http_headers"] == {"Authorization": "Bearer YOUR_FLOW_STORE_TOKEN"}
+
+
+def test_mcp_servers_toml_rejects_unknown_shape(tmp_path):
+    A = _load_assemble()
+    bad = tmp_path / "mcp.json"
+    bad.write_text(json.dumps({"mcpServers": {"weird": {"transport": "ws"}}}))
+    with pytest.raises(ValueError, match="weird"):
+        A._mcp_servers_toml(bad)
