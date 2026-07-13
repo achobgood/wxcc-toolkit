@@ -27,7 +27,9 @@ CLAUDE_DIRS = (".claude/agents", ".claude/skills", ".claude/rules")
 CODEX_DIRS = (".codex/agents", ".codex/docs/rules", ".agents/skills")
 SANITIZED = (
     (".mcp.json", "YOUR_SUPABASE_PROJECT_REF"),
-    (".codex/config.toml", "YOUR_FLOW_STORE_TOKEN"),
+)
+ENV_BACKED = (
+    (".codex/config.toml", "WXCC_FLOW_TOKEN"),   # env-backed auth marker — the file references an env var, not an embedded token
 )
 
 
@@ -98,6 +100,13 @@ def _assert_sanitized(root: Path) -> None:
             raise AssertionError(f"{rel} shipped without its sanitized placeholder")
 
 
+def _assert_env_backed(root: Path) -> None:
+    for rel, marker in ENV_BACKED:
+        p = root / rel
+        if p.exists() and marker not in p.read_text():
+            raise AssertionError(f"{rel} shipped without its env-backed auth marker")
+
+
 def _wheel_from(path: Path) -> Path:
     if path.is_file() and path.suffix == ".whl":
         return path.resolve()
@@ -138,6 +147,7 @@ def main() -> int:
         _assert_codex(both)
         for folder in (claude, codex, both):
             _assert_sanitized(folder)
+            _assert_env_backed(folder)
     print("Wheel playbook smoke test passed.")
     return 0
 

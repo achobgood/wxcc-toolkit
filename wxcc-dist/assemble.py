@@ -73,6 +73,7 @@ CODEX_PIPELINE = [
     ("lit", ".claude/agents/wxcc-agent-builder.md", ".codex/agents/wxcc-agent-builder.toml"),
     ("lit", ".claude/settings.local.json", ".codex/config.toml"),
     ("lit", ".claude/settings.json", ".codex/config.toml"),
+    ("lit", ".mcp.json", ".codex/config.toml"),   # Codex configures MCP in .codex/config.toml, not the Claude-only root .mcp.json
     ("lit", ".claude/skills", ".agents/skills"),
     ("lit", ".claude/rules", ".codex/docs/rules"),
     ("lit", ".claude/", ".codex/"),   # generic path prefix — always last
@@ -87,6 +88,7 @@ CODEX_FORBIDDEN = [
     re.compile(r"Claude Code"),
     re.compile(r"CLAUDE\.md"),
     re.compile(r"\.claude/"),
+    re.compile(r"\.mcp\.json"),
     re.compile(r"(?<!\w)/wxcc-agent-builder\b"),
     re.compile(r"(?<!\w)/wxcc-debug\b"),
     re.compile(r"Skill\([a-z][a-z-]*\)"),
@@ -238,6 +240,15 @@ def md_agent_to_toml(md: str) -> str:
     )
 
 
+# HTTP MCP servers whose Codex bearer token comes from an env var instead of a
+# static in-file header — keeps the real token OUT of the shipped project file.
+# Maps server name -> env var Codex reads at runtime. WXCC_FLOW_TOKEN is the SAME
+# var the wxcc-flow CLI resolves first (src/wxcc_flow/config.py), so a configured
+# CLI already has it. DO NOT revert this to a static token header — see the Codex
+# MCP step in README.md and the Sync Checklist row in CLAUDE.md.
+_CODEX_HTTP_BEARER_ENV = {"wxcc-flow-builder": "WXCC_FLOW_TOKEN"}
+
+
 def _mcp_servers_toml(curated_mcp: Path) -> str:
     """Translate the SANITIZED mcp.bundled.json (never the live .mcp.json —
     it holds a real token) into a Codex [mcp_servers] TOML fragment.
@@ -251,10 +262,10 @@ def _mcp_servers_toml(curated_mcp: Path) -> str:
 
     out = [
         "",
-        "# MCP servers — generated from wxcc-dist/mcp.bundled.json (sanitized",
-        "# placeholders; fill in your real values before use). Env-backed HTTP",
-        "# auth (bearer_token_env_var) exists in Codex but its header format is",
-        "# undocumented — this ships the same static placeholders as .mcp.json.",
+        "# MCP servers — generated from wxcc-dist/mcp.bundled.json. HTTP servers listed",
+        "# in _CODEX_HTTP_BEARER_ENV use bearer_token_env_var so Codex sources the token",
+        "# from an env var at runtime (no secret in this file); WXCC_FLOW_TOKEN is the",
+        "# same var the wxcc-flow CLI reads. Other servers ship sanitized placeholders.",
     ]
     for name, cfg in data["mcpServers"].items():
         out.append(f"[mcp_servers.{name}]")
@@ -266,7 +277,10 @@ def _mcp_servers_toml(curated_mcp: Path) -> str:
                 out.append(f"env = {{ {pairs} }}")
         elif "url" in cfg:
             out.append(f'url = {q(cfg["url"])}')
-            if cfg.get("headers"):
+            env_var = _CODEX_HTTP_BEARER_ENV.get(name)
+            if env_var:
+                out.append(f"bearer_token_env_var = {q(env_var)}")
+            elif cfg.get("headers"):
                 pairs = ", ".join(f"{q(k)} = {q(v)}" for k, v in cfg["headers"].items())
                 out.append(f"http_headers = {{ {pairs} }}")
         else:

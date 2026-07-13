@@ -209,15 +209,51 @@ def test_refresh_one_profile_leaves_other_untouched(bundle, tmp_path):
 
 
 def test_adding_second_profile_does_not_clobber_user_file(bundle, tmp_path):
-    """Incremental adoption: claude installed first, then a plain (both-profile)
-    init must NOT silently overwrite a user's own file sitting at a codex path."""
+    """Incremental adoption: claude installed first, then an explicit codex add
+    must NOT silently overwrite a user's own file sitting at a codex path.
+    (Plain/no-flag init now refreshes only installed profiles, so the collision
+    guard here fires on the EXPLICIT --codex-only add, not a plain init.)"""
     folder = tmp_path / "f"
     assert _init(str(folder), "--claude-only", "--yes").exit_code == 0
     (folder / "AGENTS.md").write_text("mine — keep\n")      # user's own file, unowned
-    res = _init(str(folder), "--yes")                        # add codex (default=both)
+    res = _init(str(folder), "--codex-only", "--yes")        # explicitly add codex
     assert res.exit_code == 1                                # aborts on collision
     assert "AGENTS.md" in res.output
     assert (folder / "AGENTS.md").read_text() == "mine — keep\n"   # untouched
-    res2 = _init(str(folder), "--force")                     # --force lets it through
+    res2 = _init(str(folder), "--codex-only", "--force")     # --force lets it through
     assert res2.exit_code == 0
     assert (folder / "AGENTS.md").read_text() != "mine — keep\n"   # now overwritten
+
+
+def test_plain_refresh_on_claude_only_folder_refreshes_only_claude(bundle, tmp_path):
+    """No profile flag on an existing folder refreshes only what's installed — an
+    upgrade never silently adds the other profile."""
+    folder = tmp_path / "f"
+    assert _init(str(folder), "--claude-only", "--yes").exit_code == 0
+    assert not (folder / "AGENTS.md").exists()
+    r = _init(str(folder), "--force")
+    assert r.exit_code == 0
+    assert (folder / "CLAUDE.md").exists()
+    assert not (folder / "AGENTS.md").exists()
+    assert not (folder / ".codex").exists() and not (folder / ".agents").exists()
+    assert not (folder / ".codex/.wxcc-manifest.json").exists()
+
+
+def test_plain_refresh_on_codex_only_folder_refreshes_only_codex(bundle, tmp_path):
+    folder = tmp_path / "f"
+    assert _init(str(folder), "--codex-only", "--yes").exit_code == 0
+    r = _init(str(folder), "--force")
+    assert r.exit_code == 0
+    assert (folder / "AGENTS.md").exists()
+    assert not (folder / "CLAUDE.md").exists() and not (folder / ".claude").exists()
+    assert not (folder / ".mcp.json").exists()
+
+
+def test_explicit_flag_adds_second_profile_then_plain_refresh_covers_both(bundle, tmp_path):
+    folder = tmp_path / "f"
+    assert _init(str(folder), "--claude-only", "--yes").exit_code == 0
+    assert _init(str(folder), "--codex-only", "--yes").exit_code == 0   # explicitly add codex
+    assert (folder / "CLAUDE.md").exists() and (folder / "AGENTS.md").exists()
+    r = _init(str(folder), "--force")                                    # both installed → both
+    assert r.exit_code == 0
+    assert (folder / "CLAUDE.md").exists() and (folder / "AGENTS.md").exists()

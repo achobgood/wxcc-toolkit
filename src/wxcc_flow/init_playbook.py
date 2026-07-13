@@ -161,6 +161,17 @@ def init(
         raise typer.Exit(1)
     selected = ["claude"] if claude_only else ["codex"] if codex_only else list(PROFILES)
 
+    # With no explicit profile flag, an existing folder REFRESHES only the profiles
+    # already installed there (read from their manifests) — an upgrade must never
+    # silently ADD the other profile (a Codex-only folder stays Codex-only). A fresh
+    # folder (no manifest) still gets both. Explicit --claude-only/--codex-only always
+    # win; to add the second profile to an existing folder, pass its flag. Keep the
+    # README "Update an existing project folder" section in sync with this behavior.
+    if not (claude_only or codex_only):
+        installed = [p for p in PROFILES if load_manifest(folder, p) is not None]
+        if installed:
+            selected = installed
+
     if uninstall:
         do_uninstall(folder, selected)
         return
@@ -176,10 +187,15 @@ def init(
 
     # Files already owned by a profile installed in this folder are the playbook's,
     # not the user's — a fresh profile re-writing a shared file it shares with an
-    # already-installed profile is not a collision.
+    # already-installed profile is not a collision. Check ALL profiles installed in
+    # the folder, not just those in `selected` — explicitly adding a second profile
+    # (e.g. --codex-only onto a claude-only folder) must not treat that folder's
+    # already-owned shared files as user collisions.
     owned_by_existing: set[str] = set()
-    for p in existing:
-        owned_by_existing |= set(manifests[p].get("files", {}))
+    for p in PROFILES:
+        m = manifests[p] if p in manifests else load_manifest(folder, p)
+        if m is not None:
+            owned_by_existing |= set(m.get("files", {}))
 
     # Collision guard runs for EACH fresh profile (not only when every selected
     # profile is fresh), so adding a second profile can't silently clobber a user's

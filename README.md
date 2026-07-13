@@ -114,10 +114,20 @@ writes Claude Code files (`CLAUDE.md`, `.claude/`) and Codex files
 Trust the folder when Codex prompts — the shipped `.codex/config.toml`
 (approval policy, sandbox mode, MCP servers) only takes effect in a trusted
 folder. `AGENTS.md` and the skills under `.agents/skills/` load automatically;
-the CLI command reference lives in `.codex/docs/cli-commands.md`. Configure
-the API token the same way as for Claude Code:
+the CLI command reference lives in `.codex/docs/cli-commands.md`.
 
-    wxcc-flow configure
+**MCP servers (Flow Store token).** Unlike Claude Code, the Codex Flow Store
+MCP server reads its token from an environment variable, not from a file — the
+generated `.codex/config.toml` sets `bearer_token_env_var = "WXCC_FLOW_TOKEN"`.
+Export that variable (it is the same one `wxcc-flow` itself reads) so no token
+is ever written into a project file:
+
+    export WXCC_FLOW_TOKEN="your-webex-token"
+
+`wxcc-flow configure` (used for the CLI) does NOT set this — export the env var
+yourself. If you also use the Supabase MCP server, replace the
+`YOUR_SUPABASE_ACCESS_TOKEN` / `YOUR_SUPABASE_PROJECT_REF` placeholders in
+`.codex/config.toml`.
 
 The Codex profile is generated from the Claude profile at build time — the
 two never drift. Codex has no per-command allowlist, so expect an approval
@@ -132,8 +142,14 @@ project folder to the new playbook version:
 wxcc-toolkit init my-wxcc-project --force
 ```
 
-`--force` refreshes only manifest-owned files (retired skills are removed, updated
-docs are rewritten) and leaves any files you added untouched.
+This automatically refreshes **only the profiles already installed** in that
+folder — a Claude-only folder stays Claude-only, a Codex-only folder stays
+Codex-only, and a dual-profile folder refreshes both. `--force` touches only
+manifest-owned files (retired skills are removed, updated docs are rewritten)
+and leaves any files you added untouched.
+
+To **add** the other profile to an existing folder, pass its flag —
+`wxcc-toolkit init my-wxcc-project --codex-only` (or `--claude-only`).
 
 ## Remove the playbook from a folder
 

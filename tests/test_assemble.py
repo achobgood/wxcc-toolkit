@@ -185,6 +185,7 @@ def test_phrase_map_path_swaps_most_specific_first():
     assert ".codex/docs/rules/bre-questions.md" in out
     assert ".codex/anythingelse" in out                  # generic catch-all last
     assert ".claude/" not in out
+    assert A.apply_phrase_map("edit .mcp.json to add a server") == "edit .codex/config.toml to add a server"
 
 
 def test_phrase_map_tool_isms():
@@ -307,7 +308,8 @@ def test_mcp_servers_toml_translates_sanitized_bundle():
     assert sup["env"] == {"SUPABASE_ACCESS_TOKEN": "YOUR_SUPABASE_ACCESS_TOKEN"}
     fb = data["mcp_servers"]["wxcc-flow-builder"]
     assert fb["url"] == src["mcpServers"]["wxcc-flow-builder"]["url"]
-    assert fb["http_headers"] == {"Authorization": "Bearer YOUR_FLOW_STORE_TOKEN"}
+    assert fb["bearer_token_env_var"] == "WXCC_FLOW_TOKEN"   # env-backed: no token in the file
+    assert "http_headers" not in fb                            # static header replaced
 
 
 def test_mcp_servers_toml_rejects_unknown_shape(tmp_path):

@@ -122,7 +122,7 @@ All 65 commands, verified against live prod on 2026-07-12:
 | `wxcc-flow health` | Check Flow Store API health (raw health text) |
 | `wxcc-flow build-info` | Show the Flow Store build info (version, build time) |
 | `wxcc-flow spec-diff` | Diff the LIVE API contract against the committed spec snapshot (`--exit-code` for CI). Repo/dev tool — the snapshot isn't shipped in the pip package; outside this repo pass `--snapshot PATH` |
-| `wxcc-flow init` | Materialize the bundled playbook (CLAUDE.md, .claude/, docs/, .mcp.json) into a folder |
+| `wxcc-flow init` | Materialize the bundled playbook into a folder — both assistant profiles by default (`--claude-only`/`--codex-only` to restrict) |
 | **Flow CRUD & authoring** | |
 | `wxcc-flow list` | List all flows (or subflows with `--type SUBFLOW`) |
 | `wxcc-flow get` | Get flow metadata |
@@ -230,6 +230,9 @@ See `docs/reference/flow-designer-flowir.md` for FlowIR format, tested activity 
 | `src/wxcc_flow/generated/` | GENERATED CLI commands (57 promoted + `api` namespace) — NEVER hand-edit; emitted by the `tools.generator` toolchain from the spec snapshot + overrides YAML |
 | `tools.generator` (repo tooling) | OpenAPI→typer generator + drift toolchain: `python -m tools.generator.generate --all` regenerates, `drift_check.py` is the parity gate, `pull_spec.py` refreshes the snapshot; weekly drift runbook in its README.md |
 | `specs/flow-store-api-docs.json` (repo) | Committed Flow Store OpenAPI snapshot (91 ops) — refresh via `python -m tools.generator.pull_spec`; diff against live with `wxcc-flow spec-diff` |
+| `wxcc-dist/assemble.py` (repo) | Packages the shipped `_playbook/` bundle: copies the canonical Claude sources, then `assemble_codex` GENERATES the Codex profile (`AGENTS.md`, `.codex/`, `.agents/skills/`) from them. NEVER hand-edit `_playbook/` — re-run `python wxcc-dist/assemble.py`; it gates on a link-audit + a residual-Claude-ism audit |
+| `wxcc-dist/codex/` (repo) | Static overlay INPUTS for the generated Codex profile: `config.toml` (approval/sandbox header) and `agents-md-sections.md` (byte-exact heading anchors → replacement sections). Edit these, not the generated `_playbook/.codex/**` |
+| `tools.wheel_playbook_smoke.py` (repo tooling) | Installed-wheel smoke test — pip-installs the built wheel into a temp venv and runs `wxcc-flow init` in claude-only/codex-only/both modes; runs in `.github/workflows/ci.yml` (PR) + the release workflow |
 | `.claude/agents/wxcc-agent-builder.md` | Main builder agent — drives the full workflow |
 | `.claude/skills/build-action/` | Skill: build Webex Connect flows for autonomous agent actions |
 | `.claude/skills/build-scripted-fulfillment/` | Skill: build fulfillment for scripted agent intents (digital + voice) |
@@ -428,3 +431,6 @@ Autonomous and scripted agent paths share some content. When updating one, check
 | AI Agent design doc template Section 4d | `design-scripted-agent` (produces it), `configure-scripted-agent` (consumes it), `build-scripted-fulfillment` (consumes fulfillment plan from it) |
 | Import JSON schema in `ai-agent-studio-import-json.md` | `docs/templates/ai-agent-studio-import-template.json` (field set must match) and `configure-ai-agent` Step 13 procedure |
 | `configure-ai-agent` Step 13 (import JSON generator) | `ai-agent-studio-import-json.md` schema and the template JSON (must stay consistent) |
+| MCP env-backed auth in `wxcc-dist/assemble.py` `_mcp_servers_toml` (`_CODEX_HTTP_BEARER_ENV`) | README "Using with OpenAI Codex CLI" MCP step + `tools.wheel_playbook_smoke.py` SANITIZED tuple + `tests/test_assemble.py` `test_mcp_servers_toml_translates_sanitized_bundle` — the Flow Store MCP uses `bearer_token_env_var = WXCC_FLOW_TOKEN`, NEVER a static token in the shipped file |
+| Smart-refresh in `src/wxcc_flow/init_playbook.py` `init` (plain init refreshes only INSTALLED profiles; explicit `--claude-only`/`--codex-only` add) | README "Update an existing project folder" section + the smart-refresh tests in `tests/test_init_playbook.py` |
+| Codex profile generation (`assemble_codex` in `wxcc-dist/assemble.py`) | Re-run `python wxcc-dist/assemble.py` after changing any shipped Claude source; the Claude half of `_playbook/` stays byte-identical, the Codex half (`AGENTS.md`, `.codex/`, `.agents/`) is regenerated + audited (`audit_codex`) |

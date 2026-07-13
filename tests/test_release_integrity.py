@@ -30,3 +30,13 @@ def test_smoke_script_exists_and_is_stdlib_only():
             assert all(a.name.split(".")[0] in stdlib_ok for a in node.names)
         if isinstance(node, ast.ImportFrom):
             assert (node.module or "").split(".")[0] in stdlib_ok
+
+
+def test_ci_workflow_gates_prs_with_full_suite_and_wheel_smoke():
+    text = (REPO / ".github/workflows/ci.yml").read_text()
+    assert "pull_request" in text                                  # runs on PRs
+    assert "wxcc-dist/assemble.py" in text                         # playbook freshness rebuild
+    assert "pytest" in text                                        # offline suite
+    assert "drift_check.py --enforce" in text                      # drift gate
+    assert "tools/wheel_playbook_smoke.py dist" in text            # installed-wheel smoke
+    assert text.index("python -m build") < text.index("wheel_playbook_smoke")  # build before smoke
