@@ -64,7 +64,7 @@ Before resolving entity IDs, check whether the resources referenced in the desig
 
 After provisioning, resolve all entity references to UUIDs:
 
-- **Queues:** `wxcc-flow choices queue-contact destination` → get queue UUID
+- **Queues:** `wxcc-flow choices queue-contact destination --parent-input channelType --parent-value TELEPHONY` → get queue UUID (cascading input — the parent flags are required)
 - **TTS Connectors:** `wxcc-flow choices play-message connector` → get connector UUID/name
 - **HTTP Connectors:** `wxcc-flow choices http-request connectorId` → get connector UUID
 - **Business Hours:** `wxcc-flow choices business-hours businessHoursId` → get schedule UUID

@@ -420,8 +420,8 @@ top_level_commands:
   buildInfo: build-info
   # (search + update promote via their extra_commands top_level keys)
 
-# ── drift-gate excuse list: the 7 irreducible hand-written commands (design
-#    § 14) have no spec operation; the parity gate counts them as excused. ────
+# ── drift-gate excuse list: the 8 irreducible hand-written commands (design
+#    § 14 + § 12) have no spec operation; the parity gate counts them as excused. ─
 keep_endpoints:
   - "configure"     # local: save token + auto-resolve org
   - "set-project"   # local: set project id
@@ -430,3 +430,4 @@ keep_endpoints:
   - "events"        # synthesis: mines eventsGenerated from the start activity (no event-spec endpoint)
   - "connectors"    # synthesis: aggregates two choices calls (connector-controller 404s on system project)
   - "schema"        # synthesis: builds a FlowIR node template client-side (no endpoint returns this)
+  - "spec-diff"     # meta: diffs live /v3/api-docs vs specs/ snapshot (the api-docs endpoint is not a spec op)

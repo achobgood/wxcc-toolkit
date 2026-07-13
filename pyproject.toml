@@ -29,6 +29,11 @@ where = ["src"]
 # drop both .claude/ and the bundle-root .mcp.json from the wheel.
 wxcc_flow = ["_playbook/**", "_playbook/.claude/**", "_playbook/.mcp.json"]
 
+[dependency-groups]
+# Generator/test toolchain (tools/generator/*.py + pytest import yaml);
+# `uv run` includes this group by default.
+dev = ["pytest>=8", "pyyaml>=6"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

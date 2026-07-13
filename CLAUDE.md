@@ -97,73 +97,82 @@ Run `/wxcc-debug` to troubleshoot a failing action.
 
 ## Flow Designer CLI (`wxcc-flow`)
 
-`wxcc-flow` is the preferred way to interact with Flow Designer programmatically. It wraps the Flow Store REST API (58 commands over the live 91-operation contract) and replaces the MCP server integration, which had broken `list_flows`, token rotation issues, and limited coverage (12 of 63+ endpoints).
+`wxcc-flow` is the preferred way to interact with Flow Designer programmatically. It wraps the Flow Store REST API (65 commands over the live 91-operation contract) and replaces the MCP server integration, which had broken `list_flows`, token rotation issues, and limited coverage (12 of 63+ endpoints).
 
 ### Setup
 
 ```bash
-wxcc-flow configure --token TOKEN --org ORG_ID
+wxcc-flow configure
 ```
 
-Token resolution: `WXCC_FLOW_TOKEN` env → `WEBEX_ACCESS_TOKEN` env → `~/.wxcc-flow/config.json`. Project ID is auto-resolved at configure time.
+`configure` prompts for the Webex token interactively (paste it at the prompt — there is no `--token` flag), then auto-resolves the org ID. The project ID is resolved automatically on first use (or set it manually with `set-project`). `configure`'s only flag is `--base-url` (defaults to prod US1).
+
+Token resolution: `WXCC_FLOW_TOKEN` env → `WEBEX_ACCESS_TOKEN` env → `~/.wxcc-flow/config.json`.
 
 ### Key Commands
 
-All 58 commands, verified against live prod on 2026-07-11:
+All 65 commands, verified against live prod on 2026-07-12:
 
 | Command | Purpose |
 |---------|---------|
 | **Config / Info** | |
-| `wxcc-flow configure` | Save a Webex token and auto-resolve org ID |
+| `wxcc-flow configure` | Save a Webex token (interactive prompt) and auto-resolve the org ID (project ID resolves on first use) |
 | `wxcc-flow set-project` | Manually set the project ID (overrides auto-detection) |
-| `wxcc-flow whoami` | Show current user and org info |
-| `wxcc-flow health` | Check Flow Store API health |
+| `wxcc-flow whoami` | Show the current user (raw getCurrentUser JSON — no Org/Project/Health lines) |
+| `wxcc-flow health` | Check Flow Store API health (raw health text) |
+| `wxcc-flow build-info` | Show the Flow Store build info (version, build time) |
+| `wxcc-flow spec-diff` | Diff the LIVE API contract against the committed spec snapshot (`--exit-code` for CI) |
 | `wxcc-flow init` | Materialize the bundled playbook (CLAUDE.md, .claude/, docs/, .mcp.json) into a folder |
 | **Flow CRUD & authoring** | |
 | `wxcc-flow list` | List all flows (or subflows with `--type SUBFLOW`) |
 | `wxcc-flow get` | Get flow metadata |
 | `wxcc-flow search` | Search flows by name (case-insensitive substring match) |
-| `wxcc-flow create` | Import/create a flow from a FlowV2 JSON file |
+| `wxcc-flow create` | Import/create a flow from a FlowV2 JSON file (or `-` for stdin); prints the raw created-flow JSON |
 | `wxcc-flow save-draft` | Save a FlowV2 file as the draft of an existing flow |
 | `wxcc-flow patch` | Patch a flow draft in place (partial update, FDL 2.0) |
-| `wxcc-flow draft` | Get the current draft of a flow as FlowV2 JSON |
-| `wxcc-flow export` | Export a flow as FlowV2 JSON (draft, latest published, or a version) |
-| `wxcc-flow validate` | Validate a FlowV2 file (dry-run) or a persisted flow (`--id`) |
+| `wxcc-flow draft` | Get the current draft of a flow as FlowV2 JSON (write to a file with `--out`) |
+| `wxcc-flow export` | Export a flow as FlowV2 JSON — `--version` defaults to `draft` (`latest` = most recent published, or a version ID); write to a file with `--out` (`-o` is the output FORMAT) |
+| `wxcc-flow validate` | Dry-run validate a FlowV2 FILE (or `-` for stdin) without persisting |
+| `wxcc-flow validate-id` | Validate a persisted flow (`--version-id draft` for the current draft, or a version ID) |
 | `wxcc-flow template` | Get a starter FlowIR template |
-| `wxcc-flow consume` | Create a new flow from a JSON string (UI-export shape, transported verbatim) |
-| `wxcc-flow consume-template` | Create a new flow from a catalog template |
-| `wxcc-flow import-ui` | Import a UI-exported flow JSON (v1 shape, transported verbatim) |
+| `wxcc-flow consume` | Create a new flow from a JSON string (UI-export shape, transported verbatim); prints the raw created-flow JSON |
+| `wxcc-flow consume-template` | Create a new flow from a catalog template (`consume-template TEMPLATE NAME`); prints the raw created-flow JSON |
+| `wxcc-flow import-ui` | Import a UI-exported flow JSON (v1 shape, transported verbatim; `--overwrite` takes a yes/no VALUE, not a bare flag) |
 | `wxcc-flow export-ui` | Export the full v1 FlowVersion object (incl. UI diagram data) |
 | `wxcc-flow copy` | Copy an existing flow |
-| `wxcc-flow delete` | Delete a flow |
+| `wxcc-flow delete` | Delete a flow (asks for confirmation — pass `--force` in scripts) |
 | `wxcc-flow update` | Rename / re-describe a flow (applies to the draft; publish to propagate) |
-| `wxcc-flow unique-name` | Check whether a flow name is unique (exits 1 if the name is taken) |
+| `wxcc-flow unique-name` | Check whether a flow name is unique (prints the raw `isUnique` JSON, no prose; exits 1 if the name is taken) |
 | **Lifecycle** | |
 | `wxcc-flow publish` | Publish a flow draft (add `--validate` to validate at publish time) |
 | `wxcc-flow lock` | Lock a flow for editing |
 | `wxcc-flow unlock` | Unlock a flow |
 | `wxcc-flow revert` | Revert a flow to a previous published version |
 | `wxcc-flow versions` | List published versions of a flow |
-| `wxcc-flow version` | Get one flow version object: latest published, current draft, or by ID |
-| `wxcc-flow all-versions` | List flow versions across the whole project |
+| `wxcc-flow version-latest` | Get the latest PUBLISHED version object of a flow (`--out` writes to a file) |
+| `wxcc-flow version-draft` | Get the current DRAFT version object of a flow (`--out` writes to a file) |
+| `wxcc-flow version-by-id` | Get one flow version object by version ID (`--out` writes to a file) |
+| `wxcc-flow all-versions` | List flow versions across the whole project (fetches ALL pages by default; `--page`/`--size` for one page, `--search-by` to filter) |
+| `wxcc-flow all-versions-latest` | Latest version of every flow in the project (⚠ 500s org-wide when never-published flows exist — see Known CLI Limitations) |
 | `wxcc-flow tags` | List the version tags of a flow (Live/Latest/Test/Dev) |
 | `wxcc-flow tag-history` | Show which flow versions each tag has pointed to over time |
 | **Observability (needs real calls)** | |
-| `wxcc-flow interactions` | List interactions (real calls) that hit a flow, across its versions |
+| `wxcc-flow interactions` | List interactions (real calls) that hit a flow, across its versions (`--from`/`--to` epoch ms; `-o json` prints a flat array) |
 | `wxcc-flow interaction` | Get metadata for one interaction of a flow version |
-| `wxcc-flow traces` | Get step-by-step traces for one interaction of a flow version |
+| `wxcc-flow traces` | Get step-by-step traces for one interaction of a flow version (`--page`/`--page-size`) |
+| `wxcc-flow traces-decrypt` | Get DECRYPTED traces for one interaction (`--process-id` is REQUIRED — get it from the undecrypted traces or the interaction metadata) |
 | `wxcc-flow analytics` | Get aggregate analytics for a flow version |
 | **Registry & platform** | |
-| `wxcc-flow activities` | List all available activities |
-| `wxcc-flow describe` | Describe an activity — properties, inputs, outputs |
+| `wxcc-flow activities` | List all available activities (raw JSON flat list with a `category` field; `--search-by` filters by name) |
+| `wxcc-flow describe` | Describe an activity — properties, inputs, outputs (raw activity-definition JSON) |
 | `wxcc-flow schema` | Build a FlowIR node template from the activity definition |
-| `wxcc-flow choices` | Get dropdown values for an activity input |
+| `wxcc-flow choices` | Get dropdown values for an activity input (cascading inputs REQUIRE `--parent-input`/`--parent-value` — see Known CLI Limitations) |
 | `wxcc-flow events` | List event specifications (event handlers available for flows) |
-| `wxcc-flow global-vars` | List org-level global variables |
+| `wxcc-flow global-vars` | List org-level global variables (table by default; `--search` to filter, `-o json` for raw) |
 | `wxcc-flow connectors` | List connectors (TTS and HTTP/Custom) |
 | `wxcc-flow connector-list` | List raw connector entities (connector-controller; `connectors` shows the choices-based view used by activities) |
 | `wxcc-flow connector` | Get one connector entity by ID |
-| `wxcc-flow test-expr` | Test a Pebble/flow expression, optionally with variable bindings |
+| `wxcc-flow test-expr` | Test a Pebble/flow expression (`--expr EXPR`; pass variable bindings via `--json-body`, there is no `--var` flag) |
 | `wxcc-flow templates` | List the flow/subflow template catalog |
 | `wxcc-flow template-get` | Get one flow/subflow template by ID |
 | `wxcc-flow projects` | List the org's Flow Store projects |
@@ -177,9 +186,9 @@ All 58 commands, verified against live prod on 2026-07-11:
 | `wxcc-flow check` | Find flows by what they use (where-used: global vars, EPs, skills, hours) |
 | `wxcc-flow variable-mapping` | Auto-map variables between a flow and its hand-off (GoTo) flow |
 
-All commands support `--debug` for raw HTTP traces and `-o json` for JSON output where applicable.
+All API-calling commands support `--debug` for raw HTTP traces (the local `configure`/`set-project`/`init` do not) and `-o json` for JSON output where applicable. On generated commands `-o`/`--output` is the output FORMAT — writing to a file is a separate `--out FILE` (the hand-written `template` command's `-o` is an alias for `--out`).
 
-Subflow support: pass `--type SUBFLOW` on list/create/draft/save-draft/patch/export/validate/publish/lock/unlock/revert/unique-name/activities/describe/schema/choices/check. Subflow creation via `create --type SUBFLOW` requires the start node `activityName: "start"`/`activityType: "start-subflow"` and end node `activityName: "end-subflow"`/`activityType: "end"`.
+Subflow support: pass `--type SUBFLOW` on list/get/search/create/consume/consume-template/import-ui/export-ui/draft/save-draft/patch/update/export/delete/publish/lock/unlock/revert/unique-name/activities/describe/schema/choices/check/templates/validate-id. (`validate` has NO `--type` — see Known CLI Limitations.) Subflow creation via `create --type SUBFLOW` requires the start node `activityName: "start"`/`activityType: "start-subflow"` and end node `activityName: "end-subflow"`/`activityType: "end"`.
 
 ### Known CLI Limitations
 
@@ -187,18 +196,20 @@ Subflow support: pass `--type SUBFLOW` on list/create/draft/save-draft/patch/exp
 |------------|------------|
 | `wxcc-flow events` cannot list the event-spec catalog — prod exposes no event-spec endpoint | Get event names from an exported flow's `eventFlows` (`wxcc-flow export FLOW_ID`) or `docs/reference/flow-designer-flowir.md` § 6 |
 | `patch` on drafts created by `consume-template` → server 500 ("Oops... Something broke...") | Patch only FlowIR-authored flows, or save-draft a clean FlowV2 first |
-| `all-versions --latest` (all-latest endpoint) → 500 on orgs with never-published flows | Use `all-versions` (paged) instead |
+| `all-versions-latest` → 500 org-wide when never-published flows exist (the command prints a warning naming the fallback before every call) | Fall back to paged `wxcc-flow all-versions` |
+| `validate` / `validate-id` always validate as FLOW (the v2 validate endpoints take no effective flowType); a valid SUBFLOW fails with ACTIVITY_NOT_FOUND on end-subflow | Known server gap — both commands print a warning banner; treat end-subflow errors on subflows as expected |
+| `choices` on a cascading input (e.g. queue-contact `destination`) → 400 without parent context — the old fallback to static values is gone | Pass the parent explicitly: `wxcc-flow choices queue-contact destination --parent-input channelType --parent-value TELEPHONY` |
 | `consume-template` with SUBFLOW templates → 404 FLOW_TEMPLATE_NOT_FOUND (feature-flag `flow-control-draft-templates` gated) | Create subflows via `create --type SUBFLOW` |
 | `project` / `connector-list` → 404 on the system-provisioned project (project-controller and connector-controller only see user-created projects) | These work with user-created project IDs; the flows/* endpoints accept the system project fine |
 | `traces` / `interactions` need a REAL call routed through the flow (Flow Store cannot place calls) | Route an entry point to the flow, dial it, then query |
 | Renaming: the v1 merge-patch endpoint silently ignores name/description (200 but no-op) | `wxcc-flow update` uses the v2 draft patch; new name propagates to flow level on next publish |
 
-(Rows verified live 2026-07-11. Cascading/parent choices are supported since 2026-07-11: `wxcc-flow choices ACTIVITY INPUT --parent-input PARENT --parent-value VALUE`.)
+(Rows verified live 2026-07-12.)
 
 ### Programmatic Flow Building Workflow
 
 ```
-wxcc-flow template simple-inbound -o flow.json   # starter FlowIR
+wxcc-flow template simple-inbound --out flow.json   # starter FlowIR
 # ... edit flow.json with nodes, edges, variables ...
 wxcc-flow validate flow.json                      # dry-run check
 wxcc-flow create flow.json                        # import to sandbox

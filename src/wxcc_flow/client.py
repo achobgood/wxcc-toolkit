@@ -16,6 +16,17 @@ class FlowStoreError(Exception):
         super().__init__(f"HTTP {status_code}: {body}")
 
 
+_ERROR_BODY_LIMIT = 2000
+
+
+def _error_body(resp: httpx.Response) -> str:
+    """Error body for display: full text, truncated only past a sane bound
+    with an explicit marker (never silently mid-JSON)."""
+    if len(resp.text) <= _ERROR_BODY_LIMIT:
+        return resp.text
+    return resp.text[:_ERROR_BODY_LIMIT] + " …[truncated]"
+
+
 class FlowClient:
     def __init__(self, debug: bool = False):
         token = resolve_token()
@@ -59,7 +70,7 @@ class FlowClient:
         prefs_url = f"{base}/{oid}/userPreferences"
         resp = httpx.get(prefs_url, headers=headers, timeout=30)
         if resp.is_success and resp.content:
-            prefs = resp.json()
+            prefs = self._result(resp)
             pid = prefs.get("projectId") if isinstance(prefs, dict) else None
             if pid:
                 cfg = load_config()
@@ -72,14 +83,19 @@ class FlowClient:
         url = f"{base}/{oid}/project"
         resp = httpx.get(url, headers=headers, timeout=30)
         if resp.is_success:
-            data = resp.json()
+            data = self._result(resp)
             candidates = [p.get("id") for p in data if p.get("id")] if isinstance(data, list) else []
             for cpid in candidates:
                 flows_url = f"{base}/{oid}/project/{cpid}/flows"
                 fr = httpx.get(flows_url, headers=headers, params={"size": "1"}, timeout=30)
                 if fr.is_success:
-                    fdata = fr.json()
-                    flist = fdata if isinstance(fdata, list) else fdata.get("flows", fdata.get("items", []))
+                    fdata = self._result(fr)
+                    if isinstance(fdata, list):
+                        flist = fdata
+                    elif isinstance(fdata, dict):
+                        flist = fdata.get("flows", fdata.get("items", []))
+                    else:
+                        flist = []
                     if flist:
                         cfg = load_config()
                         cfg["project_id"] = cpid
@@ -141,10 +157,10 @@ class FlowClient:
         if resp.status_code == 400:
             raise FlowStoreError(400, resp.text)
         if resp.status_code == 404:
-            typer.echo(f"Error: Not found (404). {resp.text[:200]}", err=True)
+            typer.echo(f"Error: Not found (404). {_error_body(resp)}", err=True)
             raise typer.Exit(1)
         if not resp.is_success:
-            typer.echo(f"Error: HTTP {resp.status_code}: {resp.text[:200]}", err=True)
+            typer.echo(f"Error: HTTP {resp.status_code}: {_error_body(resp)}", err=True)
             raise typer.Exit(1)
 
     def get(self, path: str, params: Optional[dict] = None) -> dict:

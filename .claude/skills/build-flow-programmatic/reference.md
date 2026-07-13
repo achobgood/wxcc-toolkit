@@ -64,7 +64,7 @@ Resolve connector values via: `wxcc-flow choices play-message connector`
 }
 ```
 
-Do NOT include `queueRadioGroup` — it triggers "UI mode" validation. Resolve queue UUIDs via: `wxcc-flow choices queue-contact destination`
+Do NOT include `queueRadioGroup` — it triggers "UI mode" validation. Resolve queue UUIDs via: `wxcc-flow choices queue-contact destination --parent-input channelType --parent-value TELEPHONY` (cascading input — the parent flags are required)
 
 ### Set Variable (double declaration)
 
@@ -369,10 +369,10 @@ Template:
 
 ## Key Gotchas
 
-1. **queueId vs destination**: The choices API uses `destination` but the validator requires `queueId`. Use `wxcc-flow choices queue-contact destination` to find values, put them in `queueId`.
+1. **queueId vs destination**: The choices API uses `destination` but the validator requires `queueId`. Use `wxcc-flow choices queue-contact destination --parent-input channelType --parent-value TELEPHONY` to find values, put them in `queueId`.
 2. **RadioGroupWithValue suffix fields**: Fields like `callbackQueue`, `scheduleTimezone`, `surveyMethod` need `:radioName` and `_radioName` suffix fields alongside the value.
 3. **Feature-gated activities**: `flow-test-activity`, `LiveCallerSentiment`, `queue-reservation` historically returned ACTIVITY_NOT_FOUND on create despite passing validation; as of 2026-07-11 they are gone from the live prod registry entirely (52 activities). Do not use them in FlowIR.
-4. **Subflows import ONLY with the query param**: `wxcc-flow create file.json --type SUBFLOW` works (verified live 2026-07-11) — the `flowType: "SUBFLOW"` body field alone is ignored and `end-subflow` then returns ACTIVITY_NOT_FOUND. Node shapes: start = `activityName: "start"` / `activityType: "start-subflow"`; end = `activityName: "end-subflow"` / `activityType: "end"`. Dry-run validate always runs in FLOW context (no flowType param), so validate subflows post-create with `wxcc-flow validate --id ID --type SUBFLOW` (expect a cosmetic FC1024 on the start node; publish still works).
+4. **Subflows import ONLY with the query param**: `wxcc-flow create file.json --type SUBFLOW` works (verified live 2026-07-11) — the `flowType: "SUBFLOW"` body field alone is ignored and `end-subflow` then returns ACTIVITY_NOT_FOUND. Node shapes: start = `activityName: "start"` / `activityType: "start-subflow"`; end = `activityName: "end-subflow"` / `activityType: "end"`. Dry-run validate always runs in FLOW context (no flowType param), so validate subflows post-create with `wxcc-flow validate-id ID --type SUBFLOW` (expect a cosmetic FC1024 on the start node; publish still works).
 5. **fn-activity**: Requires a function ID that must be created manually in the UI first (flow-store has no Functions API). `subflow-handoff` no longer has this limitation — create the subflow programmatically (gotcha 4), publish it, and reference its ID in `subflowVersion`.
 6. **Activity output variable references (FC1038)**: `{{ActivityName.OutputVar}}` expressions fail FlowIR validation. Key design patterns to avoid FC1038:
    - **Single-digit choices:** Use `ivr-menu` (Menu) instead of `ivr-collectdigits` + `condition-activity`. Menu routes by digit via edge conditions (`"1"`, `"2"`) without referencing output variables.

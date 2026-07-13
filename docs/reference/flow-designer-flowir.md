@@ -452,7 +452,7 @@ Terminal node — no output ports. Multiple disconnect nodes per flow are valid 
 }
 ```
 
-The `queueId` property is the ONLY required field. It accepts a queue UUID, a queue name, or a `{{variable}}` expression. The server auto-resolves the queue type, routing algorithm, and all internal fields. Resolve available queue values via `wxcc-flow choices queue-contact destination` (the API input name is `destination`, but the node property the validator checks is `queueId`).
+The `queueId` property is the ONLY required field. It accepts a queue UUID, a queue name, or a `{{variable}}` expression. The server auto-resolves the queue type, routing algorithm, and all internal fields. Resolve available queue values via `wxcc-flow choices queue-contact destination --parent-input channelType --parent-value TELEPHONY` (the API input name is `destination` and cascades on `channelType`, but the node property the validator checks is `queueId`).
 
 **With optional fields:**
 
@@ -807,7 +807,7 @@ Required-property tables for activities not covered by the full snippets in § 7
 | Property | Type | Required | Notes |
 |----------|------|----------|-------|
 | `channelType` | string | Yes | `TELEPHONY`, `CHAT`, etc. (default `TELEPHONY`). Not exposed via the choices API — set directly |
-| `destination` | string | Yes | RadioGroupWithValue — queue UUID or `{{variable}}`. The choices API returns "RadioGroupWithValue not supported" — resolve queue UUIDs via `wxcc-flow choices queue-contact destination` instead |
+| `destination` | string | Yes | RadioGroupWithValue — queue UUID or `{{variable}}`. The choices API returns "RadioGroupWithValue not supported" — resolve queue UUIDs via `wxcc-flow choices queue-contact destination --parent-input channelType --parent-value TELEPHONY` instead |
 | `destination:radioName` | string | Yes | `setToValue` (literal UUID) or `setToVariable` (variable ref) |
 | `destination_radioName` | string | Yes | Same value, alternate format |
 | `ewtLookbackMinutes` | int | Yes | Lookback window in minutes for EWT calculation (range: 5–240) |
@@ -1175,7 +1175,7 @@ No configurable properties. Automatically placed as the entry point of a subflow
 
 ### end-subflow (End Subflow)
 
-No configurable properties. Terminal node that returns control to the calling flow. Importable ONLY when the import call carries the `?flowType=SUBFLOW` query param (`wxcc-flow create file.json --type SUBFLOW`) — without it, the server resolves activities against the FLOW registry and returns `ACTIVITY_NOT_FOUND` (verified live 2026-07-11; use `activityType: "end"` on the node). Dry-run validate (`POST /v2/flows:validate`) has no flowType query param, so it also resolves `end-subflow` against the FLOW registry and fails with ACTIVITY_NOT_FOUND even for a valid subflow — validate subflows post-create with `wxcc-flow validate --id ID --type SUBFLOW` instead.
+No configurable properties. Terminal node that returns control to the calling flow. Importable ONLY when the import call carries the `?flowType=SUBFLOW` query param (`wxcc-flow create file.json --type SUBFLOW`) — without it, the server resolves activities against the FLOW registry and returns `ACTIVITY_NOT_FOUND` (verified live 2026-07-11; use `activityType: "end"` on the node). Dry-run validate (`POST /v2/flows:validate`) has no flowType query param, so it also resolves `end-subflow` against the FLOW registry and fails with ACTIVITY_NOT_FOUND even for a valid subflow — validate subflows post-create with `wxcc-flow validate-id ID --type SUBFLOW` instead.
 
 ### end (End Flow)
 
@@ -1321,11 +1321,11 @@ CLI: `wxcc-flow patch FLOW_ID patch.json` (auto-resolves `expectedVersion` from 
 
 ### Step 7: Observe (after real calls)
 
-Once an entry point routes real calls to the flow: `wxcc-flow interactions FLOW_ID` lists calls (`{"interactions": [], "pageInfo": {...}}` shape), `wxcc-flow traces FLOW_ID VERSION_ID INTERACTION_ID` returns step-by-step execution (add `--decrypt --process-id PID` for decrypted payloads), and `wxcc-flow analytics FLOW_ID VERSION_ID` returns aggregates (fields are `-1` when no data). The Flow Store API cannot place calls — generating an interaction always requires the contact-center side (route an entry point to the flow, dial it).
+Once an entry point routes real calls to the flow: `wxcc-flow interactions FLOW_ID` lists calls (`{"interactions": [], "pageInfo": {...}}` shape), `wxcc-flow traces FLOW_ID VERSION_ID INTERACTION_ID` returns step-by-step execution (for decrypted payloads use the separate `wxcc-flow traces-decrypt FLOW_ID VERSION_ID INTERACTION_ID --process-id PID` — `--process-id` is required), and `wxcc-flow analytics FLOW_ID VERSION_ID` returns aggregates (fields are `-1` when no data). The Flow Store API cannot place calls — generating an interaction always requires the contact-center side (route an entry point to the flow, dial it).
 
 ### Subflows
 
-All of the above works for subflows by adding `flowType=SUBFLOW` as a QUERY param (`--type SUBFLOW` on `create`, `draft`, `save-draft`, `patch`, `export`, `validate --id`, `publish`, `lock`/`unlock`, `revert`, `list`). See § 11 "Subflow Creation via FlowIR Import" for the start/end node shapes and validator quirks.
+All of the above works for subflows by adding `flowType=SUBFLOW` as a QUERY param (`--type SUBFLOW` on `create`, `draft`, `save-draft`, `patch`, `export`, `validate-id`, `publish`, `lock`/`unlock`, `revert`, `list`). See § 11 "Subflow Creation via FlowIR Import" for the start/end node shapes and validator quirks.
 
 ## 10. Common Validation Errors
 
@@ -1362,7 +1362,7 @@ Global variables (like `Global_Language`) must be declared in the FlowIR `variab
 
 ### Queue Creation Is Not Available via Flow APIs
 
-The Flow Store REST API, `wxcc-flow` CLI, and MCP server can look up existing queues (`wxcc-flow choices queue-contact destination`) but cannot create new ones. Queue creation requires the WxCC Provisioning API or the Control Hub UI (`Control Hub → Contact Center → Queues → Create Queue`). Plan queue creation as a manual prerequisite before programmatic flow building.
+The Flow Store REST API, `wxcc-flow` CLI, and MCP server can look up existing queues (`wxcc-flow choices queue-contact destination --parent-input channelType --parent-value TELEPHONY`) but cannot create new ones. Queue creation requires the WxCC Provisioning API or the Control Hub UI (`Control Hub → Contact Center → Queues → Create Queue`). Plan queue creation as a manual prerequisite before programmatic flow building.
 
 ### Set Variable Double Declaration
 
@@ -1460,7 +1460,7 @@ If a listed activity behaves this way in the future, the signal is a 400 "Activi
 
 Subflow creation via FlowIR import WORKS, but only through the `?flowType=SUBFLOW` **query parameter** (`wxcc-flow create file.json --type SUBFLOW`, verified live 2026-07-11 — created, listed under `wxcc-flow list --type SUBFLOW`, exported with `flowType: "SUBFLOW"`, and published). The `flowType: "SUBFLOW"` **body field alone** is ignored — without the query param the import resolves activities against the FLOW registry (so `end-subflow` returns `ACTIVITY_NOT_FOUND`) and creates a `FLOW`. Minimal working subflow: start node `activityName: "start"` / `activityType: "start-subflow"`, end node `activityName: "end-subflow"` / `activityType: "end"`.
 
-Two validator quirks (both verified live): dry-run validate (`POST /v2/flows:validate`) has no flowType query param and always validates as FLOW — a valid subflow fails it with ACTIVITY_NOT_FOUND for `end-subflow`; and post-create `wxcc-flow validate --id ID --type SUBFLOW` reports a cosmetic FC1024 on the start node while publish (default `skipValidation=true`) succeeds.
+Two validator quirks (both verified live): dry-run validate (`POST /v2/flows:validate`) has no flowType query param and always validates as FLOW — a valid subflow fails it with ACTIVITY_NOT_FOUND for `end-subflow`; and post-create `wxcc-flow validate-id ID --type SUBFLOW` reports a cosmetic FC1024 on the start node while publish (default `skipValidation=true`) succeeds.
 
 **Consequence (updated 2026-07-11):** subflows CAN now be created programmatically, so `subflow-handoff` is round-trip testable end-to-end (create subflow → publish → reference its ID in `subflowVersion`). `fn-activity` still requires a function ID that can only be created in the UI (there is no Functions API surface in flow-store — the string FUNCTION appears 0 times in the live /v3/api-docs contract).
 
@@ -1476,7 +1476,7 @@ Some fields marked as conditional in the activity definition are actually always
 ### Property Name Mismatches Between API Layers
 
 Some activities have different property names in the activity definition API vs. the validation/import API. Known cases:
-- `queue-contact`: The activity definition and choices API use `destination` as the input name, but the validator requires `queueId` as the node property. Using `destination` without `queueId` always fails with FC1015 "Required field 'Queue' is not configured". Use `queueId` for authoring; use `wxcc-flow choices queue-contact destination` to resolve available queues.
+- `queue-contact`: The activity definition and choices API use `destination` as the input name, but the validator requires `queueId` as the node property. Using `destination` without `queueId` always fails with FC1015 "Required field 'Queue' is not configured". Use `queueId` for authoring; use `wxcc-flow choices queue-contact destination --parent-input channelType --parent-value TELEPHONY` to resolve available queues.
 - `queue-contact`: Including `queueRadioGroup` activates "UI mode" validation that requires `destination` + all dual-format fields IN ADDITION TO `queueId`. Omit `queueRadioGroup` entirely to let `queueId` work as a complete shorthand.
 - `percent-allocation`: The activity definition API reports `allocations` as type `string[]` (the PercentAllocation component — the flat prod definition does not name it) with a default of `["{\"percent\":100,\"desc\":\"Allocation Default\"}"]` (an array of stringified JSON objects). The import validator rejects this format — it fails with "Percent allocation values must sum to 100 (current sum: 0.0)". The validator only accepts actual object arrays: `[{"percent":60,"desc":"PathA"},{"percent":40,"desc":"PathB"}]`. Use `object[]` semantics despite the API declaring `string[]`.
 - `set-announcement`: Older definition layers returned TWO inputs named `attributeTag` — feature-flag variants distinguished by `flagName=wxcc_record_agent_personal_greeting` ("Attribute tag", not required, when `flagValue=off,control`; "Greeting Purpose", required, defaultValue="Default", when `flagValue=on`). The live prod registry (2026-07-11) resolves the flag server-side and returns ONE `attributeTag` (required, defaultValue="Default", shown when `toggleAgentGreeting == true`). When `toggleAgentGreeting` is `true`, omitting `attributeTag` fails validation.
@@ -1505,6 +1505,7 @@ GET /{org}/project/{proj}/v2/activities/{name}/inputs/{input}/choices?parentInpu
 
 Known cascading fields:
 - `ivr-virtualassistantvoice` → `virtualAgentId` depends on `connector` value
+- `queue-contact` → `destination` depends on `channelType` value (e.g. `--parent-input channelType --parent-value TELEPHONY`). The CLI no longer falls back to static values when the parent is missing — always pass the parent context.
 
 ## 12. Property Input Type Summary
 

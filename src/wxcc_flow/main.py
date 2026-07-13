@@ -440,6 +440,74 @@ def template(
         print_json(tpl)
 
 
+# ── Spec drift (Phase D): live /v3/api-docs vs the committed snapshot ─
+_HTTP_METHODS = ("get", "post", "put", "patch", "delete")
+
+
+def _spec_ops(spec: dict) -> dict:
+    """Flatten a spec to {(METHOD, path): operation-dict}."""
+    ops = {}
+    for path, item in (spec.get("paths") or {}).items():
+        if not isinstance(item, dict):
+            continue
+        for m in _HTTP_METHODS:
+            op = item.get(m)
+            if isinstance(op, dict):
+                ops[(m.upper(), path)] = op
+    return ops
+
+
+def _diff_specs(snap: dict, live: dict):
+    """Return (added, removed, changed) op keys, live vs snapshot."""
+    old, new = _spec_ops(snap), _spec_ops(live)
+    added = sorted(k for k in new if k not in old)
+    removed = sorted(k for k in old if k not in new)
+    changed = sorted(
+        k for k in new
+        if k in old and json.dumps(new[k], sort_keys=True) != json.dumps(old[k], sort_keys=True)
+    )
+    return added, removed, changed
+
+
+@app.command("spec-diff")
+def spec_diff(
+    snapshot: str = typer.Option(
+        "specs/flow-store-api-docs.json", "--snapshot",
+        help="Committed spec snapshot to diff against"),
+    exit_code: bool = typer.Option(
+        False, "--exit-code",
+        help="Exit 1 when the live contract differs from the snapshot (CI use)"),
+    debug: bool = typer.Option(False, "--debug"),
+):
+    """Diff the LIVE Flow Store contract (GET /v3/api-docs) against the committed snapshot."""
+    snap_path = Path(snapshot)
+    if not snap_path.exists():
+        typer.echo(f"Error: File not found: {snapshot}", err=True)
+        raise typer.Exit(1)
+    snap = json.loads(snap_path.read_text())
+    live = _client(debug).get("/v3/api-docs")
+    if not isinstance(live, dict):
+        typer.echo("Error: live /v3/api-docs did not return a JSON object.", err=True)
+        raise typer.Exit(1)
+
+    added, removed, changed = _diff_specs(snap, live)
+    old_ops, new_ops = _spec_ops(snap), _spec_ops(live)
+    for m, p in added:
+        typer.echo(f"+ {m} {p}  ({new_ops[(m, p)].get('operationId', '?')})")
+    for m, p in removed:
+        typer.echo(f"- {m} {p}  ({old_ops[(m, p)].get('operationId', '?')})")
+    for m, p in changed:
+        typer.echo(f"~ {m} {p}  ({new_ops[(m, p)].get('operationId', '?')})")
+    typer.echo(
+        f"Live {len(new_ops)} ops / snapshot {len(old_ops)} ops — "
+        f"{len(added)} added, {len(removed)} removed, {len(changed)} changed."
+    )
+    if not (added or removed or changed):
+        typer.echo("In sync.")
+    elif exit_code:
+        raise typer.Exit(1)
+
+
 # ── Init (materialize the bundled Claude Code playbook) ──────────────
 from wxcc_flow.init_playbook import init as init_command  # noqa: E402
 app.command(name="init")(init_command)
