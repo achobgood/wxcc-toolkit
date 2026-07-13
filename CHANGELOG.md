@@ -1,0 +1,54 @@
+# Changelog
+
+All notable changes to **wxcc-toolkit** are documented here.
+
+## 0.2.0 — 2026-07-12
+
+Major expansion of the `wxcc-flow` Flow Designer CLI, plus a full verification
+pass of the platform documentation against live prod (org verified 2026-07-12).
+
+### Added
+- **`wxcc-flow` CLI: 28 → 65 top-level commands**, now generated from the live
+  Flow Store OpenAPI contract instead of hand-written. New commands include
+  `spec-diff` (diff the live `/v3/api-docs` against the committed snapshot),
+  `build-info`, `validate-id`, `version-latest` / `version-draft` /
+  `version-by-id`, `traces-decrypt`, and `all-versions` / `all-versions-latest`.
+- **`wxcc-flow api <group> <op>` namespace** — 58 raw 1:1 Flow Store operations
+  across 11 groups, each classified read-only vs. mutating in a manifest.
+- **Subflow support** across the CRUD / lifecycle commands via `--type SUBFLOW`.
+- **Cascading `choices`** via `--parent-input` / `--parent-value`.
+- **Generator toolchain** (`tools/generator/`) with a drift gate
+  (`drift_check.py --enforce`) wired into the release pipeline.
+- **Live test suites** for the CLI: a read-only tier (`pytest -m live`) and a
+  double-gated mutation tier (`pytest -m mutation` + `WXCC_LIVE_MUTATION=1`,
+  every test flow named `CLITest_*` with guaranteed teardown), plus offline
+  doc-consistency checks (`_index` ↔ files and `_playbook` byte-parity).
+
+### Changed
+- README and docs are now CLI-first — `wxcc-flow` is the primary way to drive
+  Flow Designer; the older MCP-server route is kept as an optional alternative.
+- Activity documentation reconciled to the live prod registry: **52** activities,
+  the flat activity-definition shape (no `inputGroups`/`component`), and the
+  per-activity output-port set.
+
+### Fixed
+- **15 activity docs** carried output-port claims that didn't match the live
+  registry (phantom "Undefined Error" ports removed; missing `error`/`failure`
+  ports added) — each corrected against `wxcc-flow describe` + the FlowIR §8
+  registry table.
+- Open platform facts verified via live import/export round-trips: OTP property
+  round-tripping (`generate-otp.pinValidity`, `verify-otp` extra props/ports),
+  `cryptographic-hash` outputs, and BYOC `ReceiveMessage`/`SendCustomMessage`
+  input and port names.
+- New FlowIR gotcha documented: import matches edges by node **name**, not id
+  (an id-based edge fails with `400 "Edge from=X does not match any node name"`).
+- Corrected the kitchen-sink test fixture (edges were id-based → node-name).
+
+### Notes
+- Facts that require a live voice call or beta-gated access remain intentionally
+  marked "not verified" in the docs rather than guessed.
+
+## 0.1.0 — 2026-07-11
+
+Initial public release: WxCC AI Agent Builder Toolkit (Claude Code playbook —
+agent, skills, rules, docs — plus the `wxcc-flow` Flow Designer CLI).
