@@ -39,7 +39,7 @@ On first invocation, use the Glob tool (not Bash) to check for files. Run all th
 1. **Does `.codex/config.toml` exist in the project root?** (Glob for `.codex/config.toml`)
    - If YES: read it to identify the backend. Proceed to check 2.
    - If NO: the user has no database MCP connection yet. Before starting the interview, ask what database or API their data lives in.
-     - If **Supabase**: walk them through creating `.codex/config.toml` with `npx @supabase/mcp-server-supabase@latest --project-ref {ref}`. They will need their project ref. Once connected, the agent can query their schema during the interview to make smarter suggestions.
+     - If **Supabase**: help them add a Supabase MCP server to their MCP config (`.codex/config.toml`) — the server runs `npx @supabase/mcp-server-supabase@latest --project-ref {ref}` and needs their Supabase project ref plus a personal access token. Once connected, the agent can query their schema during the interview to make smarter suggestions.
      - If **another backend**: note it and move on. You'll gather schema details in Question 6. Don't block the interview — non-MCP users may not have a schema ready to paste upfront.
 
 2. **Does `docs/plans/` contain any design docs?** (Glob for `docs/plans/*.md`)
