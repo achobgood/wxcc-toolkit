@@ -17,7 +17,7 @@ Registry metadata: `activityName: ReceiveMessage`, category `core`, group `actio
 | `outputVariableArray1` | object | No | — | Purpose not documented |
 | `flowDecryptAccess` | boolean | No | `false` | Purpose not documented |
 
-How custom messaging channels are provisioned (so that `channelName` has values to choose from) is **not documented** in this project's references — the BYOC setup procedure lives in the beta-gated developer guide.
+How custom messaging channels are provisioned (so that `channelName` has values to choose from) is **not documented** in this project's references — the BYOC setup procedure lives in the beta-gated developer guide. On an org with no provisioned custom messaging channel (2026-07-12), `wxcc-flow choices ReceiveMessage channelName` returns **400 "Activity 'ReceiveMessage' not found in registry ... flowType=FLOW"** — the activity is not resolvable for choices in this org's FLOW registry (BYOC beta-gated / not provisioned); whether provisioning a custom messaging channel would then populate `channelName` was not tested. The input names (`channelType`, `channelName`, `timeout`, `appendToTranscript`, `outputVariableArray1`, `flowDecryptAccess`) and output ports (`timeout`, `error`) above were re-confirmed via `wxcc-flow describe ReceiveMessage` on 2026-07-12; their semantics remain beta-gated.
 
 ### Output Variables (from the live activity registry)
 

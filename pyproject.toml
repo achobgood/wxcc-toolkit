@@ -37,3 +37,13 @@ dev = ["pytest>=8", "pyyaml>=6"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# Live tiers are OPT-IN. A plain `pytest` runs only the offline suite; the live
+# read-only tier runs with `-m live`, the mutation tier with `-m mutation`
+# (which ALSO requires WXCC_LIVE_MUTATION=1 — enforced in conftest). A CLI `-m`
+# overrides this default deselection.
+addopts = "-m 'not live and not mutation'"
+markers = [
+    "live: read-only tests that hit the live Flow Store API (Tier 1). Excluded by default; run with `-m live`. Auto-skip when no token resolves.",
+    "mutation: create/modify/delete round-trips against live prod (Tier 2). Double-gated: `-m mutation` AND env WXCC_LIVE_MUTATION=1. All flows named CLITest_*, deleted in teardown.",
+    "portaudit: per-activity output-port cross-check vs flowir §8 (a live subtest; reuses the shared activities fixture, no extra API calls).",
+]

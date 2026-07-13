@@ -29,27 +29,21 @@ A single Parse activity can extract multiple values. Add rows to define addition
 
 ### Output Variables
 
-User-defined output variables are created per row in the configuration (one per Output Variable + Path Expression pair). In addition, the activity exposes standard error variables:
+User-defined output variables are created per row in the configuration (one per Output Variable + Path Expression pair).
 
-| Variable | Description |
-|---|---|
-| `Parse.FailureCode` | Stores the failure code. The system sets this value only when the activity fails. |
-| `Parse.FailureDescription` | Stores the failure details. The system sets this value only when the activity fails. |
-
-> **Documentation pending** — specific `FailureCode` values for Parse are not enumerated in the Cisco help docs. The values are set only on activity failure.
+> **Not verified** — the live registry lists no output variables for the Parse activity (`wxcc-flow describe parse-activity` → `outputs: []`; flow-designer-flowir.md § 8). Earlier drafts of this doc referenced `Parse.FailureCode` and `Parse.FailureDescription` error variables; those are not present in the registry and are unverified. Treat them as undocumented unless confirmed in your environment.
 
 ### Output Paths
 
 | Output Path | Fires When |
 |---|---|
 | *(default exit)* | Parse completes successfully — all path expressions matched and output variables are populated |
-| **Undefined Error** | System error during parsing (e.g., malformed input data, invalid path expression, content type mismatch). The flow takes this path when there are undefined system errors during flow execution. |
 
-If no Undefined Error path is configured, the flow falls back to the `OnGlobalError` event handler in the Event Flows tab.
+The Parse activity exposes only the `default` output port — it has no activity-level error branch (`wxcc-flow describe parse-activity` → `outputPorts: []`; flow-designer-flowir.md § 8 lists only `default`). System errors during parsing (malformed input data, invalid path expression, content type mismatch) route to the flow's `OnGlobalError` event handler in the Event Flows tab, not an activity output path.
 
 ### Error Handling
 
-- **Malformed input:** If the Input Variable contains data that does not match the selected Content Type (e.g., invalid JSON when Content Type is set to JSON), the activity triggers the Undefined Error path.
+- **Malformed input:** If the Input Variable contains data that does not match the selected Content Type (e.g., invalid JSON when Content Type is set to JSON), the activity routes a system error to the `OnGlobalError` event handler (it has no activity-level error output port — `wxcc-flow describe parse-activity` → `outputPorts: []`).
 - **Path expression matches nothing:** When a JSONPath expression does not match any element in the input data, the target output variable receives no value. This can cause downstream activities to encounter empty/undefined variables. Use a Condition activity after Parse to check whether the output variable was populated before relying on it.
 
 > **Documentation pending** — the exact behavior when a path expression matches nothing (whether it triggers Undefined Error or silently sets an empty value) is not explicitly documented in the Cisco help docs. Testing indicates the activity does not error; the output variable is simply empty. Verify in your environment.
@@ -58,7 +52,7 @@ If no Undefined Error path is configured, the flow falls back to the `OnGlobalEr
 
 > **Documentation pending** — the Cisco help docs do not enumerate specific restrictions for the Parse activity. The following are inferred from documented behavior:
 
-- Input data must match the selected Content Type; mismatches cause the Undefined Error path to fire.
+- Input data must match the selected Content Type; a mismatch routes a system error to the `OnGlobalError` event handler (the activity has no error output port).
 - JSONPath filter expressions always return arrays, not scalars — see [http-request.md § Parse Settings](http-request.md) for the workaround.
 - The activity does not support parsing binary data or file content — input must be a string variable.
 - All non-JSON content types (XML, TOML, YAML) are normalized to JSON before the path expression is evaluated — the path expression is always JSONPath regardless of original format.

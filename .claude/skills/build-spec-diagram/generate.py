@@ -81,6 +81,15 @@ ACTIVITY_PORTS = {
     "Custom Connectors": ["Default", "Error"],
     "HTTP Connector": ["Default", "Error"],
     "Business Hours": ["Working Hours", "Holiday", "Default", "Error"],
+    "Call Progress Analysis": ["CPA Successful", "Error"],
+    "Virtual Agent (Legacy)": ["Handled", "Escalated", "Error"],
+    # BYOC + utility activities (ports verified live 2026-07-12; "Default" here is the
+    # implicit `out` success port, which the registry omits). Must match build-spec-diagram/reference.md.
+    "Cryptographic Hash": ["Default", "Error"],
+    "Generate OTP": ["Default", "Error"],
+    "Verify OTP": ["Failure", "Resend", "Error"],
+    "Receive Message": ["Timeout", "Error"],
+    "Send Custom Message": ["Error"],
     "Menu": [],  # dynamic
     "Case": [],  # dynamic
     "Percentage Allocation": [],  # dynamic

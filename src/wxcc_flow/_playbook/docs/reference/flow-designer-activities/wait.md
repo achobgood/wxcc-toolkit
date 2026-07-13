@@ -23,7 +23,7 @@ No output variables are available in this activity.
 
 ### Output Paths
 
-Single default exit. No error-specific output edges.
+Default success exit, plus an **Undefined Error** path that fires on system errors during flow execution. If the Undefined Error path is not wired, the flow falls back to the `OnGlobalError` event handler in the Event Flows tab. (Live registry: `wxcc-flow describe wait-activity` → `outputPorts` includes an `error` port with `isErrorPath: true`, verified 2026-07-12.)
 
 ### Failure Codes
 

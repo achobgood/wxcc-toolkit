@@ -61,16 +61,17 @@ The Cisco help docs do not document `FailureCode` or `FailureDescription` output
 | **Per-digit branches** | One output edge per configured digit (0–9). Maximum **10 branches**. |
 | **No-Input Timeout** | No-Input Timeout duration elapsed without receiving any DTMF input. Wire this to a counter-increment + Condition loop to implement retry behavior (see Advanced Settings note above). |
 | **Unmatched Entry** | Caller pressed a DTMF digit not configured in the Custom Menu Links section. Wire this to a clarification prompt and loop back to the Menu activity to let the caller try again. |
+| **Undefined Error** | System error during Menu execution. The live activity registry (`wxcc-flow describe ivr-menu`, 2026-07-11) exposes an `error` output port (`isErrorPath: true`); its exact trigger semantics are not documented. |
 
 > **Note:** The No-Input Timeout and Unmatched Entry paths fire on each individual occurrence — there is no built-in retry exhaustion. The flow designer must implement retry counting externally (Set Variable + Condition) to limit retries and eventually disconnect or transfer the call.
 
 ### Failure Codes
 
-> **Documentation pending** — the Cisco help docs do not enumerate failure codes for the Menu activity. The activity does not expose `FailureCode` or `FailureDescription` output variables. Errors during Menu execution (e.g., prompt file unavailable) are expected to route through the `OnGlobalError` event handler rather than an activity-level error path.
+> **Documentation pending** — the Cisco help docs do not enumerate failure codes for the Menu activity. The activity does not expose `FailureCode` or `FailureDescription` output variables. The live activity registry (`wxcc-flow describe ivr-menu`, 2026-07-11) shows the Menu activity DOES have an activity-level `error` output port (`isErrorPath: true`) — its trigger semantics are not documented; if that port is not wired, errors during Menu execution (e.g., prompt file unavailable) fall back to the `OnGlobalError` event handler.
 
 ### Error Handling
 
-The Menu activity does not have a dedicated **Undefined Error** output path like some other activities (HTTP Request, Parse, Queue Contact). If a system error occurs during Menu execution, the flow falls back to the `OnGlobalError` event handler in the Event Flows tab.
+The live activity registry (`wxcc-flow describe ivr-menu`, 2026-07-11) shows the Menu activity DOES expose a dedicated `error` output path (`isErrorPath: true`), like HTTP Request, Parse, and Queue Contact. Its exact trigger semantics are not documented. If the `error` path is not wired, a system error during Menu execution falls back to the `OnGlobalError` event handler in the Event Flows tab.
 
 For caller-facing error scenarios:
 - **No input:** Wire the No-Input Timeout path to a Play Message ("We didn't receive your selection") → Set Variable (increment counter) → Condition (counter < max) → loop back to Menu or disconnect.

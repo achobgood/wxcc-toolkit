@@ -27,7 +27,7 @@ Assigns a priority level to a contact, controlling its position in the queue. Hi
 
 ### Output Paths
 
-Single default exit. Errors are surfaced via `FailureCode`/`FailureDescription` output variables, not separate output edges.
+Default success exit, plus a **Failure** output path (registry `failure` port, `isErrorPath: true`). On failure the flow takes the Failure edge and populates the `FailureCode`/`FailureDescription` output variables. (Live registry: `wxcc-flow describe set-contact-priority` → `outputPorts` includes a `failure` port, verified 2026-07-12.)
 
 ### Restrictions
 

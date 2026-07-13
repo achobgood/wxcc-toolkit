@@ -35,6 +35,8 @@ Detects whether an outbound call was answered by a live person or an answering m
 
 The Call Progress Analysis activity does **not** expose its own branch edges (e.g., "Live Voice" / "Machine Detected" output paths on the node itself). Instead, the CPA detection result is communicated through **event handler output variables**, depending on the scenario:
 
+> **Note:** The activity does expose a single `failure` error output port (isErrorPath), but no result-based branches — the Live-Voice/Machine-Detected outcome always arrives via the events described below (`wxcc-flow describe call-progress-analysis` → `outputPorts`: `failure`; flow-designer-flowir.md § 8).
+
 **Callback scenario (courtesy, scheduled, or personal):**
 
 When a callback attempt encounters an answering machine or voicemail, the system marks the call as unsuccessful and fires the **CallbackFailed** global event. The AMD result is captured in the `CallbackFailed.reason` output variable.

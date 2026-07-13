@@ -73,10 +73,11 @@ No output variables are documented for the legacy Feedback activity. Survey resp
 
 ### Output Paths
 
+The legacy Feedback activity exposes **no output ports** in the live activity registry (`wxcc-flow describe Feedback` → `outputPorts: []`, verified 2026-07-11) — in particular, it has **no error path** (unlike Feedback V2, which exposes an `error` port). The activity continues via its default exit to the next activity.
+
 | Output Path | Fires When |
 |---|---|
 | *(default exit)* | Survey completes (fully or partially) — wire to Disconnect Contact |
-| **Undefined Error** | System error during survey execution (e.g., questionnaire load failure, Webex Experience Management connection error) |
 
 > **Note:** Timeout and invalid input within the survey are handled internally by the activity's retry/prompt mechanism (configured via Webex Experience Management questionnaire settings and the Timeout advanced setting). They do not produce separate output paths.
 

@@ -24,7 +24,7 @@ Uses **Weighted Round Robin (WRR)**, not random sampling. Over sufficient volume
 
 | Variable | Type | Description |
 |---|---|---|
-| `Percentallocation.percentage` | INTEGER | The percentage route selected for the current contact |
+| `Percentallocation.percentage` | STRING | The percentage route selected for the current contact. The live registry types this `STRING` (`wxcc-flow describe percent-allocation` → `percentage`: STRING, "Next Percentage Route"; flow-designer-flowir.md § 8) |
 | `Percentallocation.description` | STRING | The description of the selected path |
 
 [source: flow-designer-patterns.md § Output Variables]

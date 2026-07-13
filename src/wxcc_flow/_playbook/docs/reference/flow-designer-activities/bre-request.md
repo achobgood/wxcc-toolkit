@@ -51,16 +51,15 @@ BRE supports responses in JSON, XML, TOML, and YAML. Data is normalized to an ob
 
 | Output Path | Fires When |
 |---|---|
-| **Success** | BRE returned a response (check `httpStatusCode` to distinguish 2xx from 4xx/5xx) |
-| **Undefined Error** | System error during BRE request execution (network failure, timeout exhausted after retries, malformed configuration) |
+| **Success** (`default`) | BRE returned a response (check `httpStatusCode` to distinguish 2xx from 4xx/5xx) |
 
-If no Undefined Error path is configured, the flow uses the `OnGlobalError` event handler.
+The BRE Request exposes only the `default` (Success) output port — it has no activity-level error branch (`wxcc-flow describe bre-request` → `outputPorts: []`; flow-designer-flowir.md § 8 lists only `default`, like `http-request-v2`). System errors during execution (network failure, timeout exhausted after retries, malformed configuration) route to the flow's `OnGlobalError` event handler, not an activity output path.
 
 > **Important:** The Success path fires for all HTTP responses including 4xx/5xx. Always branch on `httpStatusCode` after the BRE Request to handle error responses explicitly.
 
 ### Failure Codes
 
-> **Documentation pending** — the Cisco help docs do not enumerate activity-specific failure codes (like `FailureCode` / `FailureDescription`) for the BRE Request activity. The BRE Request does not appear to expose `FailureCode` output variables the way Bridged Transfer or Blind Transfer do. Use `httpStatusCode` to detect BRE-side errors (4xx/5xx) and the Undefined Error path for system-level failures.
+> **Documentation pending** — the Cisco help docs do not enumerate activity-specific failure codes (like `FailureCode` / `FailureDescription`) for the BRE Request activity. The BRE Request does not appear to expose `FailureCode` output variables the way Bridged Transfer or Blind Transfer do. Use `httpStatusCode` to detect BRE-side errors (4xx/5xx) and the `OnGlobalError` event handler for system-level failures (the activity has no error output port — `wxcc-flow describe bre-request` → `outputPorts: []`).
 
 ### Restrictions
 

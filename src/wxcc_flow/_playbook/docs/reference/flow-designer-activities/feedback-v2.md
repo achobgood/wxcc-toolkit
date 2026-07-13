@@ -59,7 +59,7 @@ The survey questionnaire in Survey Builder also includes:
 
 ### Output Variables
 
-No output variables are documented for the Feedback V2 activity. Survey responses (including partial responses) are sent directly to the Survey Builder reporting in WxCC Analyzer — they are not captured as flow variables.
+No activity-specific output variables (the live registry exposes only a generic `status`, undocumented). Survey responses (including partial responses) are sent directly to the Survey Builder reporting in WxCC Analyzer — they are not captured as flow variables. [source: wxcc-flow describe Feedback-V2 → outputs: status; flow-designer-flowir.md § 8]
 
 ### Output Paths
 

@@ -61,6 +61,8 @@ Notify URL sample payload (Cisco, § Verify OTP):
 
 "Minimal required set is just `pin` and `transactionReference`" (flowir.md § 7 gotcha).
 
+**Round-trip re-verified 2026-07-12** (`wxcc-flow create` → `export` against live prod, org ccbcamp0199): `notifyURL`, `resendCommand`, and `extraParameters` all survive import/export intact even though they are absent from the `describe` output — confirming the flowir.md § 7 finding on the current prod build. Their runtime semantics remain not documented.
+
 **Registry/doc discrepancy:** the live `describe` output (2026-07-11) lists exactly five inputs (`pin`, `transactionReference`, `pinFormatPrefix`, `pinFormatSuffix`, `flowDecryptAccess`), while flowir.md § 7 round-trip tested three additional properties (`notifyURL`, `resendCommand`, `extraParameters`) and does not list `flowDecryptAccess`. Cisco's UI documentation covers Notify URL and Extra Parameters, supporting their validity despite absence from `describe`.
 
 ### Output Variables
@@ -79,7 +81,9 @@ From the live activity registry (2026-07-11) — matches flowir.md § 8 registry
 | `failure` | Yes | Trigger semantics not documented |
 | `resend` | Yes | "use the `resend` port to loop back to `generate-otp`" (flowir.md § 7 gotcha) |
 
-The registry lists no success port. flowir.md § Implicit Output Ports lists `generate-otp` and `screen-pop` as having implicit `out` success ports but does NOT list `verify-otp` — whether an implicit `out` success edge applies here is **not verified**. General flowir.md guidance: "if an activity logically continues to the next step, try the `out` condition even if the registry doesn't list it."
+The `error`, `failure`, and `resend` ports were confirmed to **round-trip on 2026-07-12** — a live flow wiring all three imported and exported intact (`wxcc-flow create`/`export`, org ccbcamp0199).
+
+The registry lists no success port. flowir.md § Implicit Output Ports lists `generate-otp` and `screen-pop` as having implicit `out` success ports but does NOT list `verify-otp` — whether an implicit `out` success edge applies here is **still not verified** (the 2026-07-12 round-trip flow did not wire an `out` edge from verify-otp, so its acceptance was not tested). General flowir.md guidance: "if an activity logically continues to the next step, try the `out` condition even if the registry doesn't list it."
 
 ### Use Cases
 

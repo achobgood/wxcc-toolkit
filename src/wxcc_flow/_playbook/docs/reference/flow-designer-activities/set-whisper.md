@@ -46,7 +46,7 @@ This activity has no output variables.
 
 ### Output Paths
 
-Single default exit. No error-specific output edges.
+Single default (success) exit. You can configure an error-handling path (**Undefined Error**) to handle system errors during flow execution.
 
 ### Failure Codes
 

@@ -18,7 +18,7 @@ Registry metadata: `activityName: SendCustomMessage`, category `core`, group `ac
 | `outputVariableArray1` | object | No | — | Purpose not documented |
 | `flowDecryptAccess` | boolean | No | `false` | Purpose not documented |
 
-How custom messaging channels are provisioned (so that `channelName` has values to choose from) is **not documented** in this project's references — the BYOC setup procedure lives in the beta-gated developer guide.
+How custom messaging channels are provisioned (so that `channelName` has values to choose from) is **not documented** in this project's references — the BYOC setup procedure lives in the beta-gated developer guide. On an org with no provisioned custom messaging channel (2026-07-12), `wxcc-flow choices SendCustomMessage channelName` returns **400 "Activity 'SendCustomMessage' not found in registry ... flowType=FLOW"** — the activity is not resolvable for choices in this org's FLOW registry (BYOC beta-gated / not provisioned); whether provisioning a custom messaging channel would then populate `channelName` was not tested. The input names (`channelName`, `messageType`, `messageText`, `attachments`, `appendToTranscript`, `outputVariableArray1`, `flowDecryptAccess`) and output port (`error`) above were re-confirmed via `wxcc-flow describe SendCustomMessage` on 2026-07-12; their semantics remain beta-gated.
 
 ### Output Variables (from the live activity registry)
 

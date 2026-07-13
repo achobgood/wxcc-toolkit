@@ -12,11 +12,11 @@ Sends DTMF tones during an active call. Use it to navigate external IVR systems 
 
 ### Output Variables
 
-No output variables. Send Digits transmits DTMF tones and does not return data to the flow.
+No activity-specific output variables. The live registry exposes only a generic `status` output, which is undocumented. [source: wxcc-flow describe send-digits → outputs: status; flow-designer-flowir.md § 8]
 
 ### Output Paths
 
-Single default exit. No error-specific output edges.
+Default success exit, plus a **Failure** output path (registry `failure` port, `isErrorPath: true`) that fires on system errors during flow execution. (Live registry: `wxcc-flow describe send-digits` → `outputPorts` includes a `failure` port, verified 2026-07-12.)
 
 ### Use Cases
 

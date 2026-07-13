@@ -10,11 +10,19 @@ Controls call recording during an interaction by toggling recording on or off ba
 | Activity Description | Optional description |
 | Enable Recording | Select a flow variable from the dropdown that controls whether recording is enabled or disabled |
 
-This activity has no output variables.
+### Output Variables
+
+Verified via the live registry (`wxcc-flow describe RecordingControl`, 2026-07-12):
+
+| Variable | Description |
+|---|---|
+| `RecordingControl.FailureCode` | Failure code, set only when the activity fails |
+| `RecordingControl.FailureDescription` | Detailed failure description, set only when the activity fails |
+| `RecordingControl.status` | Status of the activity |
 
 ### Output Paths
 
-Single default exit. No error-specific output edges.
+Default success exit, plus a **Failure** output path (registry `failure` port, `isErrorPath: true`). On failure the flow takes the Failure edge and populates the `FailureCode`/`FailureDescription` output variables. (Live registry: `wxcc-flow describe RecordingControl` → `outputPorts` includes a `failure` port, verified 2026-07-12.)
 
 **Consent priority:** The Recording Control activity interacts with recording settings at three levels — tenant, queue, and user consent. The priority order:
 1. If user consent = Yes → recording is enabled regardless of tenant/queue settings

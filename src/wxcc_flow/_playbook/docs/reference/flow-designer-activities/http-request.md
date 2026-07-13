@@ -95,9 +95,8 @@ The HTTP Request activity makes outbound HTTP calls to external APIs from a Flow
 | Output Path | Fires When |
 |---|---|
 | *(default exit)* | HTTP request completes (any status code — 2xx, 4xx, 5xx). The `httpStatusCode` output variable contains the actual status code. Use a Condition or Case activity downstream to branch on success vs. failure status codes. |
-| **Undefined Error** | System error during the HTTP request (e.g., connection failure, DNS resolution failure, malformed URL, internal platform error). This path fires for errors that prevent the HTTP request from completing at all — not for HTTP-level error responses like 4xx/5xx. |
 
-If no Undefined Error path is configured, the flow falls back to the `OnGlobalError` event handler in the Event Flows tab.
+The HTTP Request activity exposes only the `default` output port — it has no activity-level error branch (`wxcc-flow describe http-request` → `outputPorts: []`; flow-designer-flowir.md § 8 lists only `default`). System-level errors during the request (connection failure, DNS resolution failure, malformed URL, internal platform error) route to the flow's `OnGlobalError` event handler in the Event Flows tab, not an activity output path.
 
 > **Important:** The HTTP Request activity does **not** have separate output edges for different HTTP status codes. All completed requests (regardless of status code) exit via the default path. To handle 4xx or 5xx responses, add a Condition activity after the HTTP Request that checks `{{HTTPRequest.httpStatusCode}}`.
 
@@ -106,16 +105,16 @@ If no Undefined Error path is configured, the flow falls back to the `OnGlobalEr
 ```
 HTTP Request (GET /api/customers?id={{custId}})
   │
-  ├── (default exit) → Condition: {{HTTPRequest1.httpStatusCode}} == 200
-  │     ├── TRUE → Parse / continue flow
-  │     └── FALSE → Play Message ("lookup failed") → fallback path
-  │
-  └── (Undefined Error) → Play Message ("system error") → Disconnect
+  └── (default exit) → Condition: {{HTTPRequest1.httpStatusCode}} == 200
+        ├── TRUE → Parse / continue flow
+        └── FALSE → Play Message ("lookup failed") → fallback path
+
+# System-level errors (connection/DNS failure) route to the OnGlobalError event handler, not an output edge.
 ```
 
 ### Failure Codes
 
-No proprietary failure codes. HTTP errors are returned via `httpStatusCode` in the output variables (e.g., 400, 401, 404, 429, 500). Use a Condition or Case activity downstream to branch on the status code. System-level errors (connection failure, DNS resolution) fire the Undefined Error output path.
+No proprietary failure codes. HTTP errors are returned via `httpStatusCode` in the output variables (e.g., 400, 401, 404, 429, 500). Use a Condition or Case activity downstream to branch on the status code. System-level errors (connection failure, DNS resolution) route to the `OnGlobalError` event handler — the activity has no error output port (`wxcc-flow describe http-request` → `outputPorts: []`).
 
 ### Restrictions
 

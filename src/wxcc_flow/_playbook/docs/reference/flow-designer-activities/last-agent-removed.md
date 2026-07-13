@@ -1,8 +1,8 @@
 ## Last Agent Removed Event
 
-> **Documentation pending — not yet verified against Cisco help docs.**
+> **Partially verified — event-spec name known from real flows; Cisco help does not document it (searched 2026-07-12).**
 >
-> This event handler exists as a shape in the [Cloverhound WxCC Flow Builder Activity Library](https://github.com/Cloverhound/Webex-CC-Flow-Builder-Activity-Library) but could not be verified against the official Cisco help documentation at help.webex.com as of May 2025.
+> This event handler exists as a shape in the [Cloverhound WxCC Flow Builder Activity Library](https://github.com/Cloverhound/Webex-CC-Flow-Builder-Activity-Library). Its FlowIR `eventSpecificationName` is **`FCAsk(ContactLastAgentRemoved)`** [source: flow-designer-flowir.md § 6 "Available Event Specifications" — listed as used by real flows; the spec endpoint returns only 2 specs, so this name is not API-verified]. The official Cisco Flow Designer help article ([nhovcy4](https://help.webex.com/en-us/article/nhovcy4/Build-and-manage-flows-with-Flow-Designer), searched 2026-07-12) does **not** document this event by name — it documents only `AgentAccepted`, `AgentDisconnected`, `PhoneContactEnded`, and the `OnGlobalError` workflow. Firing semantics, output variables, and UI restrictions remain **not verified**.
 
 ### What We Know
 

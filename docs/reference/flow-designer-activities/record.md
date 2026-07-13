@@ -33,6 +33,7 @@ Records caller audio (voicemail messages, verbal confirmations, or compliance re
 | Output Path | Fires When |
 |---|---|
 | *(default exit)* | Recording completes successfully — the caller spoke and the audio was captured. The `Record_audioFileData` variable is populated. Wire to the next activity (e.g., Upload Audio, Play Message confirmation, or Disconnect Contact). |
+| **No Input Timeout** | Trigger semantics not documented. The live registry lists this as a distinct error output port on the Record activity, separate from Undefined Error (`wxcc-flow describe record` → `outputPorts`: `noInputTimeout`, `undefinedErrors`; flow-designer-flowir.md § 8). |
 | **Undefined Error** | System error during recording (e.g., media services failure, feature not enabled, API error, or no audio input detected). The `Record_errorCode` and `Record_errorDescription` variables are populated with the specific failure code. If no Undefined Error path is configured, the flow falls back to the `OnGlobalError` event handler. |
 
 > **Wiring pattern:** See the [Upload Audio](upload-audio.md) activity for a complete Record → Upload Audio wiring example. The Record default exit feeds into Upload Audio, and the Undefined Error path feeds into a Play Message ("Recording failed") → Disconnect Contact.

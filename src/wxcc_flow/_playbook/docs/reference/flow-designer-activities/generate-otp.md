@@ -67,7 +67,7 @@ For FlowIR builds, wire the success edge with condition `out` even though `wxcc-
 
 ### Gotchas
 
-- **`pinValidity` unit conflict:** the Cisco UI documentation says "Define OTP Validity (in minutes)" with a default of 30 minutes, but flowir.md § 7b describes the FlowIR value as "Validity duration in seconds as string (e.g. `"300"`)". The registry gives no default and no unit. Which unit the API value actually uses is **not verified** — confirm in the Flow Designer UI before relying on a value.
+- **`pinValidity` unit conflict:** the Cisco UI documentation says "Define OTP Validity (in minutes)" with a default of 30 minutes, but flowir.md § 7b describes the FlowIR value as "Validity duration in seconds as string (e.g. `"300"`)". The registry gives no default and no unit. A live round-trip on 2026-07-12 (`wxcc-flow create`/`export`, org ccbcamp0199) confirmed the API **stores the value verbatim as a string** — `"300"` imported and exported unchanged — but this proves nothing about the unit. Which unit the API value actually uses is **still not verified** — confirm in the Flow Designer UI before relying on a value.
 - `pinLength` and `pinValidity` are strings, not integers [flow-designer-flowir.md § 7b].
 - `pinFormat` uses RadioGroup (not RadioGroupWithValue) — set the value directly without suffix fields [flow-designer-flowir.md § 7b, § 11 RadioGroup Pattern].
 - The `OTP` output is a secure variable (registry `isSecure: true`) — from the live activity registry.

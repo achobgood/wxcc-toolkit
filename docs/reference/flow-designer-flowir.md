@@ -716,7 +716,7 @@ Output ports: `default`, `error`.
 
 ## 7b. Additional Activity Properties
 
-Required-property tables for activities not covered by the full snippets in § 7. Parsed from the activity definition API (`wxcc-flow describe`). The `flowDecryptAccess` toggle (boolean, optional, default `false`) appears on nearly every activity — it is omitted from the tables below for brevity.
+Required-property tables for activities not covered by the full snippets in § 7. Parsed from the activity definition API (`wxcc-flow describe`). The `flowDecryptAccess` toggle (boolean, optional, default `false`) appears on **45 of the 52** registry activities (counted live 2026-07-12) — it is omitted from the tables below for brevity. Its runtime purpose is documented nowhere (not in the Cisco articles, the registry payload, or this reference); it stays "not documented."
 
 ### screen-pop (Screen Pop) — ✅ TESTED
 
@@ -1506,6 +1506,14 @@ GET /{org}/project/{proj}/v2/activities/{name}/inputs/{input}/choices?parentInpu
 Known cascading fields:
 - `ivr-virtualassistantvoice` → `virtualAgentId` depends on `connector` value
 - `queue-contact` → `destination` depends on `channelType` value (e.g. `--parent-input channelType --parent-value TELEPHONY`). The CLI no longer falls back to static values when the parent is missing — always pass the parent context.
+
+### Edges Reference Node `name`, Not `id`
+
+FlowIR import matches each edge's `from`/`to` against node **`name`** values, not node `id`s. An edge that names a node id fails at `create` with `400 "Edge from='<id>' does not match any node name."` (verified live 2026-07-12: a fixture whose edges referenced node ids failed import until the edges were rewritten to node names). Node `id` is incidental to import — a live `flows/{id}:export` returns `null` for a node's `id`. When authoring or hand-editing FlowIR, always wire edges by node `name`. The same 2026-07-12 fix also rewrote the `eventFlows[*].onEvents` targets from ids to node names as a precaution and the flow then imported cleanly — but the 400 named only an edge, so whether `onEvents` strictly requires the name was not isolated; use node names there too to be safe.
+
+### `copy` Returns 500 on Structurally-Incomplete Flows
+
+`wxcc-flow copy FLOW_ID` (`POST /flows/{id}:copy`) returns a generic `HTTP 500 "Oops... Something broke..."` when the source flow has unresolved structural errors (e.g. a GoTo/hand-off with no destination — the class of problem `validate` reports as FC1015; the 500 itself carries no specific code). The server **still creates the copy** (observed name prefix `Copy_`) despite the 500, so a scripted caller must reconcile by name after a 500 rather than trust the error to mean "nothing was created" (verified live 2026-07-12). `copy` succeeds cleanly on a valid flow.
 
 ## 12. Property Input Type Summary
 

@@ -23,7 +23,7 @@ The Set Announcement activity can configure three announcement types in a single
 
 ### Output Variables
 
-This activity has no output variables.
+No activity-specific output variables. The live registry exposes only a generic `status` output, which is undocumented. [source: wxcc-flow describe set-announcement → outputs: status; flow-designer-flowir.md § 8]
 
 ### Failure Codes
 
@@ -31,7 +31,12 @@ No failure codes are documented for this activity.
 
 ### Output Paths
 
-Single default exit. No error-specific output edges.
+| Output Path | Fires When |
+|---|---|
+| *(default exit)* | The announcement configuration is applied successfully — wire to the next activity |
+| **Undefined Error** | System error while applying the announcement configuration |
+
+If the Undefined Error path is not configured, the flow falls back to the global `OnGlobalError` event handler. [source: wxcc-flow describe set-announcement → outputPorts: error (isErrorPath); flow-designer-flowir.md § 8 Activity Registry]
 
 ### Placement
 

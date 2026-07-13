@@ -39,7 +39,7 @@ From the live activity registry:
 
 Cisco help ("What to do next"): "The standard output variable for the Cryptographic Hash node is CryptographicHash.HashOutput which captures the hash."
 
-**Source discrepancy:** the Cisco article's in-section table lists output variables `hash.output` ("Generated hash is stored in this variable") and `hash.salt` ("The salt value used is stored in this variable"). These names do not match the live registry (`HashOutput`, `status`) or Cisco's own "What to do next" note (`CryptographicHash.HashOutput`). The registry lists no salt output variable. Treat the registry names as authoritative for FlowIR; how the UI surfaces a salt output (if at all) is not verified.
+**Source discrepancy:** the Cisco article's in-section table lists output variables `hash.output` ("Generated hash is stored in this variable") and `hash.salt` ("The salt value used is stored in this variable"). These names do not match the live registry (`HashOutput`, `status`) or Cisco's own "What to do next" note (`CryptographicHash.HashOutput`). The registry lists no salt output variable. Treat the registry names as authoritative for FlowIR; how the UI surfaces a salt output (if at all) is not verified. A live round-trip (2026-07-12, `wxcc-flow create`/`export`, org ccbcamp0199) confirmed the exported flow definition carries **no per-node output-variable declarations** — output variables are activity-registry-defined, not stored on the node — so import/export cannot confirm or deny a `hash.salt` runtime output. The `HashOutput` encoding (hex vs. Base64) likewise remains runtime-only and unverified.
 
 ### Output Paths
 
