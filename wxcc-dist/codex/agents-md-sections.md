@@ -54,6 +54,13 @@ The full command reference table (all commands, one row each) lives in
 `.codex/docs/cli-commands.md`. `wxcc-flow --help` and
 `wxcc-flow <command> --help` give the same facts from the CLI itself.
 
+<!-- @section: ### Known CLI Limitations -->
+### Known CLI Limitations
+
+The full known-limitations table (per-command gotchas and their workarounds)
+lives in `.codex/docs/cli-limitations.md`. Consult it before relying on any
+`wxcc-flow` command's edge-case behavior.
+
 <!-- @section: ## Sync Checklist (Preventing Config Drift) -->
 ## Sync Checklist (Preventing Config Drift)
 

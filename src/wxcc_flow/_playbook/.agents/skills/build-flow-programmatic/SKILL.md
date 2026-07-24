@@ -124,6 +124,8 @@ wxcc-flow export {flow-id} -o json
 
 Spot-check that key properties survived the import: queue IDs, TTS connector names, variable assignments, edge conditions. Report any discrepancies.
 
+**UI-loadability:** Flows built here via `wxcc-flow create` open normally in the Flow Designer UI — `create` assigns correct diagram widget types (verified 2026-07-23). This does NOT hold for `save-draft`: adding activities to an *existing* flow with `wxcc-flow save-draft` corrupts the diagram widget types and the flow then fails to open with "Cannot find factory with type [...]". To add activities to an existing flow programmatically and keep it UI-openable, use the `save-draft` → remap widget types → `import-ui` workaround in `docs/reference/flow-designer-flowir.md` § "Working CLI Workaround".
+
 ## Step 8: Publish (optional)
 
 Ask the user if they want to publish:

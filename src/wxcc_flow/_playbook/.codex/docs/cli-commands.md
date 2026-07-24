@@ -63,7 +63,7 @@ All 65 commands, verified against live prod on 2026-07-12:
 | `wxcc-flow connectors` | List connectors (TTS and HTTP/Custom) |
 | `wxcc-flow connector-list` | List raw connector entities (connector-controller; `connectors` shows the choices-based view used by activities) |
 | `wxcc-flow connector` | Get one connector entity by ID |
-| `wxcc-flow test-expr` | Test a Pebble/flow expression (`--expr EXPR`; pass variable bindings via `--json-body`, there is no `--var` flag) |
+| `wxcc-flow test-expr` | Test a Pebble/flow expression (`--expr EXPR`; pass variable bindings via `--json-body`, there is no `--var` flag). Bindings go in a `variables` **map** (name→value), NOT an array — e.g. `--json-body '{"expr":"{{ foo }}","variables":{"foo":"bar"}}'` → `generatedValue: "bar"`. The `[{"name","value","type"}]` array shape returns HTTP 400 "request body is not readable" (verified live 2026-07-23). |
 | `wxcc-flow templates` | List the flow/subflow template catalog |
 | `wxcc-flow template-get` | Get one flow/subflow template by ID |
 | `wxcc-flow projects` | List the org's Flow Store projects |

@@ -68,6 +68,7 @@ Autonomous and scripted agent paths share some content. When updating one, check
 | Activity registry or property tables in `flow-designer-flowir.md` | `flow-designer-activities/` port names and activity docs (must stay consistent) |
 | Property tables in `flow-designer-flowir.md` §7/§7b | `build-flow-programmatic/reference.md` validated patterns |
 | `build-flow-programmatic` skill steps | `flow-designer-flowir.md` §9 Validate → Create Workflow (must stay consistent) |
+| `save-draft` UI-diagram-corruption + `import-ui` remap workaround (`flow-designer-flowir.md` §11) | `AGENTS.md` Known CLI Limitations row + `build-flow-programmatic/SKILL.md` Step 7 UI-loadability note (all three must agree: `create` is UI-safe, `save-draft` corrupts, `import-ui` remap is the fix) |
 | Flow Designer pipeline in `flow-designer-pipeline.md` rule | Add programmatic path as alternative to `build-flow-designer` |
 | Ref-tag version bump in any reference doc | Rules file that cites it (if ref-tag format changed) |
 | `configure-scripted-agent` skill steps | `ai-agent-studio-scripted.md` (platform details must match); `scripted-agent-build.md` (build steps must match) |

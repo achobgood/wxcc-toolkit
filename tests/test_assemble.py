@@ -230,11 +230,17 @@ def test_build_agents_md_real_claude_md_under_cap_with_pointers():
     assert len(agents_md.encode("utf-8")) <= 32768
     assert A.GROUNDING_MARKER in agents_md
     assert ".codex/docs/cli-commands.md" in agents_md
+    assert ".codex/docs/cli-limitations.md" in agents_md
     assert ".codex/docs/sync-checklist.md" in agents_md
-    assert set(extracted) == {".codex/docs/cli-commands.md", ".codex/docs/sync-checklist.md"}
+    assert set(extracted) == {".codex/docs/cli-commands.md",
+                              ".codex/docs/cli-limitations.md",
+                              ".codex/docs/sync-checklist.md"}
     # the extracted table content moved OUT of AGENTS.md and INTO the docs
     assert "| `wxcc-flow list` |" not in agents_md
     assert "| `wxcc-flow list` |" in extracted[".codex/docs/cli-commands.md"]
+    # the Known CLI Limitations table also moved out of AGENTS.md into its doc
+    assert "| Limitation | Workaround |" not in agents_md
+    assert "| Limitation | Workaround |" in extracted[".codex/docs/cli-limitations.md"]
     assert "Sync Checklist" in extracted[".codex/docs/sync-checklist.md"]
     for content in extracted.values():
         assert "CLAUDE.md" not in content and ".claude/" not in content

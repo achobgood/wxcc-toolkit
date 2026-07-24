@@ -38,7 +38,11 @@ Temporarily transfers a call to an external destination while **retaining flow c
 
 ### Output Paths
 
-**Non-terminal node.** The call returns to the flow after the third party hangs up or on failure. Wire one output edge and branch on `FailureCode`.
+The live registry exposes a **single `failure` output port** — `wxcc-flow describe bridged-transfer` and `wxcc-flow schema bridged-transfer` both return `outputPorts: [{condition: failure, isErrorPath: true}]`, and flow-designer-flowir.md § 8 lists only `failure`. Verified 2026-07-23 by building a `Queue Contact → Play Music (60s) → Bridged Transfer` overflow flow that wired **only** the `failure` port and validated clean. There is no implicit `out`/`default` port (flow-designer-flowir.md § "implicit out ports" does not list bridged-transfer). On the `failure` port you branch on `FailureCode`.
+
+Per flow-designer-flowir.md § bridged-transfer, "a successful transfer bridges the call and Flow Designer loses control" — only a failed/returned transfer surfaces on the `failure` port.
+
+> **Open item (not live-tested here):** The intro above (Cisco's definition) says the call returns to the flow when the third party hangs up. That return-on-hangup runtime behavior was **not** confirmed by a live call in this verification — only the port *structure* (one `failure` port) was. The older guidance "wire one output edge and branch on `FailureCode == 0` for success" is inconsistent with the single-`failure`-port structure; treat the `failure` port as the only wireable output until you confirm return-on-success behavior in your own tenant with a real call.
 
 ### Output Variables
 
@@ -64,11 +68,12 @@ Temporarily transfers a call to an external destination while **retaining flow c
 ```
 Play Message ("Connecting you to...") → Bridged Transfer ({{Extension}}, timeout: 30s)
   │
-  ▼ (call returns here)
-Condition: {{BridgedTransfer_dxm.FailureCode}} == 0
-  ├── TRUE (connected, third party hung up) → Disconnect Contact
-  └── FALSE (failed) → Play Message (error) → Disconnect Contact
+  └── failure (only wireable port) → Play Message (error) → Disconnect Contact / fallback queue
 ```
+
+The activity exposes **only a `failure` output port** (verified — see § Output Paths). A successful transfer bridges the call and the flow loses control, so there is no success-continuation edge to wire. Wire the `failure` port to your error/fallback handling and branch on `FailureCode` there if you need to distinguish busy (2) / no-answer (3) / code-48 (queued-or-assigned).
+
+> The older `FailureCode == 0` "TRUE (connected) → Disconnect" branch shown in earlier docs assumed a success-continuation edge that does not exist in the port structure. Do not rely on it unless a live call in your tenant confirms a post-success return.
 
 ### Restrictions
 
@@ -93,8 +98,8 @@ Bridged Transfer has an implicit dequeue enhancement. From Cisco docs:
 
 | Aspect | Blind Transfer | Bridged Transfer |
 |---|---|---|
-| Flow control retained? | No — call leaves system | Yes — call returns on completion/failure |
-| Output paths | Terminal (none) | Non-terminal (flow continues) |
+| Flow control retained? | No — call leaves system | On failure, yes (returns via `failure` port); on success, the call bridges and control is lost |
+| Output paths | Terminal (none) | One `failure` port only — no success/continuation port (verified; see § Output Paths) |
 | Timeout setting | None | 1–120 seconds |
 | Failure codes | 2 (codes 48, 6) | 6 (codes 1, 2, 3, 5, 6, 48) |
 | DTMF output digits | No | Yes (up to 32 chars) |

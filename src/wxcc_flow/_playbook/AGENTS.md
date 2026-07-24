@@ -130,20 +130,9 @@ The full command reference table (all commands, one row each) lives in
 `wxcc-flow <command> --help` give the same facts from the CLI itself.
 ### Known CLI Limitations
 
-| Limitation | Workaround |
-|------------|------------|
-| `wxcc-flow events` cannot list the event-spec catalog — prod exposes no event-spec endpoint | Get event names from an exported flow's `eventFlows` (`wxcc-flow export FLOW_ID`) or `docs/reference/flow-designer-flowir.md` § 6 |
-| `patch` on drafts created by `consume-template` → server 500 ("Oops... Something broke...") | Patch only FlowIR-authored flows, or save-draft a clean FlowV2 first |
-| `all-versions-latest` → 500 org-wide when never-published flows exist (the command prints a warning naming the fallback before every call) | Fall back to paged `wxcc-flow all-versions` |
-| `validate` / `validate-id` always validate as FLOW (the v2 validate endpoints take no effective flowType); a valid SUBFLOW fails with ACTIVITY_NOT_FOUND on end-subflow | Known server gap — both commands print a warning banner; treat end-subflow errors on subflows as expected |
-| `choices` on a cascading input (e.g. queue-contact `destination`) → 400 without parent context — the old fallback to static values is gone | Pass the parent explicitly: `wxcc-flow choices queue-contact destination --parent-input channelType --parent-value TELEPHONY` |
-| `consume-template` with SUBFLOW templates → 404 FLOW_TEMPLATE_NOT_FOUND (feature-flag `flow-control-draft-templates` gated) | Create subflows via `create --type SUBFLOW` |
-| `project` / `connector-list` → 404 on the system-provisioned project (project-controller and connector-controller only see user-created projects) | These work with user-created project IDs; the flows/* endpoints accept the system project fine |
-| `traces` / `interactions` need a REAL call routed through the flow (Flow Store cannot place calls) | Route an entry point to the flow, dial it, then query |
-| Renaming: the v1 merge-patch endpoint silently ignores name/description (200 but no-op) | `wxcc-flow update` uses the v2 draft patch; new name propagates to flow level on next publish |
-
-(Rows verified live 2026-07-12.)
-
+The full known-limitations table (per-command gotchas and their workarounds)
+lives in `.codex/docs/cli-limitations.md`. Consult it before relying on any
+`wxcc-flow` command's edge-case behavior.
 ### Programmatic Flow Building Workflow
 
 ```

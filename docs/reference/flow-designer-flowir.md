@@ -1,4 +1,4 @@
-<!-- ref-tag: fd-flowir-v4 -->
+<!-- ref-tag: fd-flowir-v6 -->
 
 # Flow Designer FlowIR Reference
 
@@ -1479,7 +1479,98 @@ Some activities have different property names in the activity definition API vs.
 - `queue-contact`: The activity definition and choices API use `destination` as the input name, but the validator requires `queueId` as the node property. Using `destination` without `queueId` always fails with FC1015 "Required field 'Queue' is not configured". Use `queueId` for authoring; use `wxcc-flow choices queue-contact destination --parent-input channelType --parent-value TELEPHONY` to resolve available queues.
 - `queue-contact`: Including `queueRadioGroup` activates "UI mode" validation that requires `destination` + all dual-format fields IN ADDITION TO `queueId`. Omit `queueRadioGroup` entirely to let `queueId` work as a complete shorthand.
 - `percent-allocation`: The activity definition API reports `allocations` as type `string[]` (the PercentAllocation component — the flat prod definition does not name it) with a default of `["{\"percent\":100,\"desc\":\"Allocation Default\"}"]` (an array of stringified JSON objects). The import validator rejects this format — it fails with "Percent allocation values must sum to 100 (current sum: 0.0)". The validator only accepts actual object arrays: `[{"percent":60,"desc":"PathA"},{"percent":40,"desc":"PathB"}]`. Use `object[]` semantics despite the API declaring `string[]`.
+- `play-music`: The activity definition (`wxcc-flow describe play-music`) reports `audioRadioGroup` with `showOnCondition` values `staticAudio` / `dynamicAudio`, but the value that actually saves and round-trips for a static hold-music file is `audioRadioGroup: "audioFile"` (with `prompt: "<audio-file-name>"`). Verified 2026-07-23 via `save-draft` + re-export of a Play Music node (`prompt: "defaultmusic_on_hold.wav"`, `audioRadioGroup: "audioFile"`, `duration: 60`) — it validated clean and round-tripped unchanged. Use `wxcc-flow choices play-music prompt` to list available audio file names.
 - `set-announcement`: Older definition layers returned TWO inputs named `attributeTag` — feature-flag variants distinguished by `flagName=wxcc_record_agent_personal_greeting` ("Attribute tag", not required, when `flagValue=off,control`; "Greeting Purpose", required, defaultValue="Default", when `flagValue=on`). The live prod registry (2026-07-11) resolves the flag server-side and returns ONE `attributeTag` (required, defaultValue="Default", shown when `toggleAgentGreeting == true`). When `toggleAgentGreeting` is `true`, omitting `attributeTag` fails validation.
+
+### `fnName` Dropped on Export/Copy Breaks Round-Trips (Function Activities)
+
+`wxcc-flow draft` (FlowV2 export) and `wxcc-flow copy` **may** omit the `fnName` property on Function (`fn-activity`) nodes — the node keeps its `fnVersionConfig.id` (the real function link) but loses the `fnName` label. **The drop is inconsistent, not universal — it is per-node, and some Function nodes in the same export keep `fnName` while others lose it.** In a FlowV2 draft export, a Function node appears as `activityType: "action"` with `properties.activityName: "fn-activity"`, `properties.activityType: "function"`, and `properties.fnName`; it is `properties.fnName` that goes missing on the affected nodes. Consequences (verified live 2026-07-23):
+
+**Re-verified 2026-07-23 (2nd pass) — the drop does NOT reproduce on every flow.** On flow `NAPA_IVR` (a UI-authored flow with three `fn-activity` nodes) a `draft` export dropped `fnName` on exactly **one** of the three (`parseStoreUserName_r5z`, whose `fnVersionConfig.version` was `"1"`), while the other two (`FormatStoreHours2_o4j`, `FormatStoreAddress_6w3`, both `fnVersionConfig.version "2"`) retained `fnName`. Validating that draft failed with `Import Failure: fnName not found for activity with id 51cd9583-...` (`ACTIVITY_NOT_FOUND`) — confirming even one null `fnName` breaks the round-trip. But on `NAPA_fixed_import_test` (a flow whose `fnName`s had already been restored and re-imported), both `draft` **and** `copy` retained `fnName` on **all three** nodes and `wxcc-flow validate` passed with **no** `fnName` error. **Takeaway:** once every `fn-activity` node's `fnName` is restored and the flow is re-imported, it round-trips cleanly and the drop does not recur. The `version "1"` vs `"2"` correlation above is an observation, not a confirmed deterministic trigger — always check every `fn-activity` node after export rather than relying on a rule for which ones drop.
+
+- `wxcc-flow validate` / `save-draft` on the exported FlowV2 fail with `Import Failure: fnName not found for activity with id <uuid>` (`ACTIVITY_NOT_FOUND`).
+- `wxcc-flow validate-id --version-id draft` on the **same live draft** does **not** flag it — the persisted-draft validator resolves the function via `fnVersionConfig.id`, so the flow runs fine live. The mismatch is purely in the export/import round-trip path.
+- `wxcc-flow patch` re-imports the **entire** resulting draft server-side, so if **any** `fn-activity` node has a null `fnName` in the import representation it fails with the same `fnName not found` error **even when the patch delta only touches unrelated nodes**. This makes `patch` unusable on a flow that still has any un-restored `fnName` (a flow whose `fnName`s all round-trip — e.g. after a restore-and-reimport — patches fine).
+
+**Workarounds:**
+- Before `save-draft`/`validate`, re-add `fnName` to every `fn-activity` node. The value equals the node label minus its `_xxx` suffix (e.g. node `parseStoreUserName_r5z` → `fnName: "parseStoreUserName"`). A clean `wxcc-flow validate` confirms the value resolves (a wrong name re-triggers `fnName not found`).
+- `save-draft` (full-flow replace) passes `validate` once `fnName` is restored, and the `fn-activity` nodes' `fnName`/`fnVersionConfig` round-trip intact — **BUT save-draft alone leaves the flow un-openable in the Flow Designer UI** (widget-type corruption, see next subsection). To keep it UI-openable, follow `save-draft` with the remap + `import-ui` workaround documented below.
+- A plain `wxcc-flow copy` (no `save-draft`) stays UI-loadable if you just need a backup.
+
+### `save-draft` of a FlowV2 Body Corrupts the UI Diagram ("Cannot find factory")
+
+`wxcc-flow save-draft` (and any FlowV2 import that lacks a `diagram` block) makes the server **auto-regenerate the diagram**. The regenerator re-types **specific** activity widgets to their raw `activityName` instead of the generic UI widget type — but it is **selective, not blanket**: most `action`-category activities keep the correct `action` type. Re-verified live 2026-07-23 (2nd pass) on a clean `copy` (fn/HTTP widgets = `action` before save-draft), the diagram-less `save-draft` re-typed exactly three activity kinds and left the rest correct:
+
+| activityName | Correct widget `type` | `type` after `save-draft` | Corrupted? |
+|---|---|---|---|
+| `fn-activity` | `action` | `fn-activity` | ❌ Yes |
+| `http-request-v2` | `action` | `http-request` | ❌ Yes |
+| `end` | `end` | `action` | ❌ Yes |
+| `play-message`, `play-music`, `queue-contact`, `bridged-transfer` | `action` | `action` | ✅ No |
+| `set-variable` | `set-variable` | `set-variable` | ✅ No |
+| `condition-activity`, `ivr-menu` | `enum-gateway` | `enum-gateway` | ✅ No |
+| `blind-transfer`, `disconnect-contact` | `terminating-action` | `terminating-action` | ✅ No |
+
+The Flow Designer UI registers factories by widget `type` and only knows the generic types, so a corrupted `fn-activity`/`http-request` widget fails to open the flow with:
+
+```
+Failed to load flow
+Cannot find factory with type [fn-activity]
+```
+
+Verified live 2026-07-23 by diffing `export-ui` of the same flow through three states:
+
+| Flow state | Function-node widget `type` | Opens in Flow Designer UI? |
+|---|---|---|
+| Original (UI-authored) | `action` | ✅ Yes |
+| After `wxcc-flow copy` only | `action` | ✅ Yes |
+| After `wxcc-flow create` (new flow from FlowIR) | `action` | ✅ Yes — **`create` does NOT corrupt** (verified: `play-message` → `action`, `disconnect-contact` → `terminating-action`) |
+| After `wxcc-flow save-draft` of a FlowV2 body | `fn-activity` (and HTTP nodes → `http-request`) | ❌ No — "Cannot find factory" |
+
+**Key distinction:** the bug is specific to `save-draft` (regenerating the diagram of an *existing* flow). Building a *new* flow with `create` runs a different diagram-generation path that assigns correct widget types — so the `build-flow-programmatic` skill (which uses `create`) produces UI-loadable flows. The corruption only bites when you `save-draft` a FlowV2 body over an existing flow.
+
+The logical graph (`nodes`/`edges`/variables) and `validate` results are unaffected — only the widget `type` field is corrupted. Verified 2026-07-23 by diffing a corrupted widget against the original: **every field is identical except `type`** (`widgetType` stays `activity`, ports/coordinates/properties all intact). This makes the corruption fully reversible — see the workaround below.
+
+> **Scope of this finding:** `save-draft` over an existing flow corrupts the diagram (verified 2026-07-23). `create` (new flow from FlowIR) does **not** — verified same day by creating a flow with `play-message`/`disconnect-contact` nodes and confirming `export-ui` shows widget types `action`/`terminating-action` (correct). So the corruption is a `save-draft`-only behavior, not a general FlowV2-import behavior.
+
+> **⚠️ Measurement caution — always baseline against a widget `type` of `action`, not against a prior `export-ui`.** The corruption is easy to "fail to reproduce" if your BEFORE snapshot was itself taken after a `save-draft`. In one build the `export-ui` used as "before" already showed `fn-activity`/`http-request` widget types (it had been save-drafted earlier in the session), so comparing it to the post-`save-draft` "after" showed **no change** and led to a false "no corruption" conclusion. A truly clean baseline is a fresh `wxcc-flow copy` of a UI-authored / `import-ui`'d flow: its fn/HTTP widgets read `type: "action"` (verified 2026-07-23). Re-run the check against that, not against a possibly-already-corrupted export.
+
+### Working CLI Workaround: `save-draft` → remap widget `type` → `import-ui`
+
+You CAN add activities programmatically and keep the flow UI-openable. The trick: let `save-draft` do the hard part (generating complete, correctly-wired widgets/ports/arrows for the new nodes), then fix only the corrupted `type` field before re-importing via `import-ui` (which — unlike `save-draft` — transports the diagram **verbatim** and does NOT regenerate it). Verified end-to-end live 2026-07-23: the resulting flow had correct types, all `fnName`s intact, and the new nodes/edges wired.
+
+**The `activityName` → correct-widget-`type` map** (harvest from any uncorrupted `export-ui` of the flow; these are the values seen in a real UI-authored flow):
+
+| Widget `type` | activityNames that use it |
+|---|---|
+| `start` | the start node (`NewContact` etc.) |
+| `action` | `http-request-v2`, `fn-activity`, `queue-contact`, `play-message`, `play-music`, `bridged-transfer`, and most other activities |
+| `set-variable` | `set-variable` |
+| `enum-gateway` | `condition-activity`, `ivr-menu` (and other branching/gateway activities) |
+| `terminating-action` | `disconnect-contact`, `blind-transfer` |
+| `end` | `end` (End Flow) |
+| `arrow` | links (`widgetType: "link"`) — never remap these |
+
+**Procedure** (always rehearse on a `copy` first — a plain `copy` is UI-loadable, so it's a safe sandbox):
+
+```
+1. export-ui FLOW  --out ui_before.json        # BEFORE any save-draft — source of the correct type map
+2. draft FLOW      --out flow.json             # FlowV2 logical graph
+   # edit flow.json: add nodes/edges (restore fnName on every fn-activity node first — see prior subsection)
+3. save-draft COPY flow.json                   # generates the full diagram, but with corrupted widget types
+4. export-ui COPY  --out ui_after.json         # complete graph + ports + arrows, wrong types
+   # remap: for each activity widget in ui_after, set type = map[properties.activityName]
+   #        (new activity nodes not in the map → "action"); leave widgetType:"link" arrows alone
+   # clear top-level "id"/"flowId", set a unique "name"
+5. import-ui ui_after_fixed.json               # transports diagram verbatim → types preserved → UI-loadable
+6. export-ui NEW --out verify.json             # confirm no widget has type in {activityName-style values}; confirm fnName intact
+```
+
+**Why it works:** `import-ui` is verbatim transport (v1 shape), so whatever widget `type` you set survives. Doing the graph-building with `save-draft` (on a throwaway copy) and the final write with `import-ui` gets you correct wiring *and* correct types.
+
+⚠ **`save-draft` is NOT the only diagram-regenerating step — `wxcc-flow update` (rename/re-describe) also regenerates and selectively corrupts the diagram.** Because `update` writes via the v2 draft patch, it triggers the exact same widget-`type` corruption as `save-draft`. Verified live 2026-07-23: a fresh `copy` of a UI-loadable flow `export-ui`'d clean widget types `{'http-request-v2': 'action', 'fn-activity': 'action', 'end': 'end'}`; a single `wxcc-flow update <id> --name "..."` (rename only, no other change) then `export-ui`'d `{'http-request-v2': 'http-request', 'fn-activity': 'fn-activity', 'end': 'action'}` — the same selective corruption (`fn-activity` → `fn-activity`, `http-request-v2` → `http-request`, `end` → `action`; other widgets untouched). **Implication:** if you rename a flow via the CLI after it was UI-loadable, re-run the `export-ui` → remap → `import-ui` fix above before opening it in the Flow Designer UI.
+
+To land the workaround on the real flow, `import-ui` with `--overwrite yes` and the production flow's `name`. **Flow ID preservation is VERIFIED (2026-07-23):** `import-ui --overwrite yes` updates the SAME flow ID in place (an overwrite of `6a629dc0d66dac31e10dabb2` / `NAPA_huntgroup_routing` left exactly one flow with that ID and the corrected diagram). The CC entry-point assignment binds to the flow ID, so it should carry over — but the CC side was NOT directly re-verified here (cc-* APIs need cjp scope).
 
 ### v1 flows:import Is Multipart (Contract Mislabels It)
 
@@ -1488,6 +1579,10 @@ Some activities have different property names in the activity definition API vs.
 ### v1 Merge-Patch Ignores Flow Metadata
 
 `PATCH /{orgId}/project/{projectId}/flows/{flowId}` (application/merge-patch+json) returns 200 but silently ignores `name` and `description` — only `lastModifiedDate` changes (verified live 2026-07-11 with full before/after entity diffs). To rename or re-describe a flow, patch the v2 draft instead (`wxcc-flow update FLOW_ID --name NEW`) and publish; the flow-level name updates on publish.
+
+### test-expr Bindings Are a Map, Not an Array
+
+`wxcc-flow test-expr` passes variable bindings via `--json-body`, and the `variables` binding must be a **map** (name→value), NOT an array — e.g. `--json-body '{"expr":"{{ foo }}","variables":{"foo":"bar"}}'` → `generatedValue: "bar"`. The `[{"name","value","type"}]` array shape returns HTTP 400 "request body is not readable" (verified live 2026-07-23).
 
 ### Cascading Choices
 
